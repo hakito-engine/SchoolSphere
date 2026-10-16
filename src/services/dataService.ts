@@ -10,6 +10,7 @@ import {
   Assignment,
   AssignmentSubmission,
   OnlineExam,
+  ExamSubmission,
   ScheduleItem,
   CounselingRecord,
   Announcement,
@@ -21,6 +22,8 @@ import {
   ParentMessage,
   ScheduleBlockConfig,
   TeacherStudentMessage,
+  LessonPeriodConfig,
+  PasswordResetRequest,
 } from '../types';
 import {
   INITIAL_SCHOOL_PROFILE,
@@ -44,6 +47,7 @@ import {
   INITIAL_PARENT_MESSAGES,
   INITIAL_SCHEDULE_BLOCKS,
   INITIAL_TEACHER_STUDENT_MESSAGES,
+  INITIAL_LESSON_PERIOD_CONFIG,
 } from '../data/mockData';
 
 const STORAGE_PREFIX = 'schoolsphere_pro_';
@@ -153,7 +157,113 @@ export class DataService {
 
   // --- Users ---
   static getUsers(): User[] {
-    return getStoredItem<User[]>('users', INITIAL_USERS);
+    const stored = getStoredItem<User[]>('users', INITIAL_USERS);
+    let modified = false;
+    let upgraded = stored.map((u) => {
+      // Migrate legacy '123' or empty passwords to default '123456'
+      if (u.password === '123' || !u.password) {
+        modified = true;
+        return { ...u, password: '123456' };
+      }
+      return u;
+    });
+
+    // Automatically ensure every student has a User account
+    const students = getStoredItem<Student[]>('students', INITIAL_STUDENTS);
+    for (const s of students) {
+      const cleanU = s.name.toLowerCase().replace(/[^a-z0-9]/g, '');
+      const hasAccount = upgraded.some(
+        (u) =>
+          u.id === `usr-std-${s.id}` ||
+          u.id === s.id ||
+          (u.nipOrNisn && u.nipOrNisn === s.nisn) ||
+          (u.username === cleanU && u.role === 'siswa')
+      );
+      if (!hasAccount) {
+        upgraded.push({
+          id: `usr-std-${s.id}`,
+          name: s.name,
+          email: `${cleanU}@siswa.smanusantara.sch.id`,
+          username: cleanU,
+          password: '123456',
+          role: 'siswa',
+          nipOrNisn: s.nisn,
+          phone: s.parentPhone,
+          status: 'aktif',
+          classId: s.classId,
+        });
+        modified = true;
+      }
+    }
+
+    // Automatically ensure every teacher has a User account
+    const teachers = getStoredItem<Teacher[]>('teachers', INITIAL_TEACHERS);
+    for (const t of teachers) {
+      const cleanU = t.name.toLowerCase().replace(/[^a-z0-9]/g, '');
+      const hasAccount = upgraded.some(
+        (u) =>
+          u.id === `usr-tch-${t.id}` ||
+          u.id === t.id ||
+          (t.nip && u.nipOrNisn === t.nip) ||
+          (u.username === cleanU && ['guru', 'wali_kelas', 'guru_bk', 'wakasek_kurikulum'].includes(u.role))
+      );
+      if (!hasAccount) {
+        upgraded.push({
+          id: `usr-tch-${t.id}`,
+          name: t.name,
+          email: t.email || `${cleanU}@guru.smanusantara.sch.id`,
+          username: cleanU,
+          password: '123456',
+          role: t.isHomeroom ? 'wali_kelas' : 'guru',
+          nipOrNisn: t.nip,
+          phone: t.phone,
+          status: 'aktif',
+            position: t.position || 'Guru Mata Pelajaran',
+        });
+        modified = true;
+      }
+    }
+
+    // Automatically ensure every parent (Orang Tua) has a User account
+    for (const s of students) {
+      if (s.parentName && s.parentName.trim()) {
+        const cleanParentU = s.parentName.toLowerCase().replace(/[^a-z0-9]/g, '');
+        const parentUser = upgraded.find(
+          (u) =>
+            u.id === `usr-ortu-${s.parentId}` ||
+            u.id === `usr-ortu-${cleanParentU}` ||
+            (u.username === cleanParentU && u.role === 'orang_tua')
+        );
+        if (!parentUser) {
+          upgraded.push({
+            id: `usr-ortu-${s.parentId || cleanParentU}`,
+            name: s.parentName,
+            email: `${cleanParentU}@ortu.smanusantara.sch.id`,
+            username: cleanParentU,
+            password: '123456',
+            role: 'orang_tua',
+            phone: s.parentPhone,
+            status: 'aktif',
+            childrenIds: [s.id],
+          });
+          modified = true;
+        } else {
+          // Ensure this student is in their childrenIds
+          if (!parentUser.childrenIds) {
+            parentUser.childrenIds = [s.id];
+            modified = true;
+          } else if (!parentUser.childrenIds.includes(s.id)) {
+            parentUser.childrenIds.push(s.id);
+            modified = true;
+          }
+        }
+      }
+    }
+
+    if (modified) {
+      setStoredItem('users', upgraded);
+    }
+    return upgraded;
   }
 
   static getUserById(id: string): User | undefined {
@@ -185,6 +295,190 @@ export class DataService {
     return true;
   }
 
+  static updateUserCredentials(
+    userId: string,
+    newUsername: string,
+    newPassword: string,
+    currentUser: { id: string; name: string; role: Role }
+  ): boolean {
+    const users = this.getUsers();
+    const idx = users.findIndex((u) => u.id === userId);
+    if (idx < 0) return false;
+    const cleanU = newUsername.toLowerCase().replace(/[^a-z0-9]/g, '');
+    users[idx].username = cleanU;
+    if (newPassword && newPassword.trim()) {
+      users[idx].password = newPassword.trim();
+    }
+    setStoredItem('users', [...users]);
+    this.logAction(
+      currentUser,
+      'UPDATE_USER_CREDENTIALS',
+      'Manajemen Pengguna',
+      `Super Admin memperbarui kredensial untuk ${users[idx].name} (Username: ${cleanU})`
+    );
+    return true;
+  }
+
+  static updateSuperAdminCredentials(
+    data: {
+      name: string;
+      username: string;
+      password?: string;
+      phone?: string;
+      whatsapp?: string;
+    },
+    currentUser: { id: string; name: string; role: Role }
+  ): { success: boolean; message: string; updatedUser?: User } {
+    const users = this.getUsers();
+    const adminIndex = users.findIndex(
+      (u) => u.id === currentUser.id || u.role === 'super_admin'
+    );
+    if (adminIndex < 0) {
+      return { success: false, message: 'Akun Super Admin tidak ditemukan dalam sistem.' };
+    }
+
+    const cleanU = data.username.toLowerCase().replace(/[^a-z0-9]/g, '');
+    if (!cleanU) {
+      return { success: false, message: 'Username tidak boleh kosong.' };
+    }
+
+    const duplicate = users.find(
+      (u, idx) => idx !== adminIndex && u.username.toLowerCase() === cleanU
+    );
+    if (duplicate) {
+      return {
+        success: false,
+        message: `Username @${cleanU} sudah digunakan oleh ${duplicate.name}. Silakan gunakan username lain.`,
+      };
+    }
+
+    const target = users[adminIndex];
+    target.name = data.name.trim();
+    target.username = cleanU;
+    const effectivePhone = (data.whatsapp || data.phone || '').trim();
+    if (effectivePhone) {
+      target.phone = effectivePhone;
+    }
+    if (data.password && data.password.trim()) {
+      target.password = data.password.trim();
+    }
+
+    setStoredItem('users', [...users]);
+
+    // Synchronize school profile adminWhatsapp so login page forgot password button links directly
+    const profile = this.getSchoolProfile();
+    const finalWa = effectivePhone || profile.adminWhatsapp;
+    if (finalWa) {
+      profile.adminWhatsapp = finalWa;
+      setStoredItem('school_profile', profile);
+    }
+
+    this.logAction(
+      currentUser,
+      'UPDATE_SUPER_ADMIN_CREDENTIALS',
+      'Pengaturan & Kredensial',
+      `Super Admin memperbarui kredensial akun: Nama: ${target.name}, Username: @${cleanU}, WhatsApp: ${finalWa || '-'}`
+    );
+
+    return {
+      success: true,
+      message: `Kredensial Super Admin berhasil diperbarui! Username: @${cleanU}, WhatsApp: ${finalWa || '-'}.`,
+      updatedUser: target,
+    };
+  }
+
+  static deleteUser(id: string, currentUser: { id: string; name: string; role: Role }): boolean {
+    const users = this.getUsers();
+    const target = users.find((u) => u.id === id);
+    if (!target) return false;
+    // Don't delete last super admin
+    if (target.role === 'super_admin' && users.filter((u) => u.role === 'super_admin').length <= 1) {
+      return false;
+    }
+    const updated = users.filter((u) => u.id !== id);
+    setStoredItem('users', updated);
+    this.logAction(
+      currentUser,
+      'DELETE_USER',
+      'Manajemen Pengguna',
+      `Super Admin menghapus pengguna: ${target.name} (${target.username})`
+    );
+    return true;
+  }
+
+  // --- Password Reset Requests ---
+  static getPasswordResetRequests(): PasswordResetRequest[] {
+    return getStoredItem<PasswordResetRequest[]>('password_reset_requests', [
+      {
+        id: 'req-demo-1',
+        name: 'Ratna Safitri, M.Pd.',
+        usernameOrNip: 'ratnasafitri',
+        whatsappNumber: '0813-1122-3344',
+        role: 'guru',
+        requestedAt: '2024-10-12 08:30',
+        status: 'pending',
+      },
+    ]);
+  }
+
+  static createPasswordResetRequest(req: {
+    name: string;
+    usernameOrNip: string;
+    whatsappNumber: string;
+    role?: string;
+  }): PasswordResetRequest {
+    const list = this.getPasswordResetRequests();
+    const newReq: PasswordResetRequest = {
+      ...req,
+      id: `req-${Date.now()}`,
+      requestedAt: new Date().toISOString().replace('T', ' ').substring(0, 16),
+      status: 'pending',
+    };
+    setStoredItem('password_reset_requests', [newReq, ...list]);
+    return newReq;
+  }
+
+  static addPasswordResetRequest(req: Omit<PasswordResetRequest, 'id' | 'requestedAt' | 'status'>): PasswordResetRequest {
+    return this.createPasswordResetRequest(req);
+  }
+
+  static resolvePasswordResetRequest(
+    id: string,
+    newPassword: string,
+    currentUser: { id: string; name: string; role: Role }
+  ): PasswordResetRequest | undefined {
+    const list = this.getPasswordResetRequests();
+    const target = list.find((r) => r.id === id);
+    if (!target) return undefined;
+    target.status = 'resolved';
+    target.resolvedAt = new Date().toISOString().replace('T', ' ').substring(0, 16);
+    target.resolvedBy = currentUser.name;
+    target.newPasswordGenerated = newPassword;
+    setStoredItem('password_reset_requests', [...list]);
+
+    // Also update in users table
+    const users = this.getUsers();
+    const uClean = target.usernameOrNip.toLowerCase().replace(/[^a-z0-9]/g, '');
+    const user = users.find(
+      (u) =>
+        u.username.toLowerCase().replace(/[^a-z0-9]/g, '') === uClean ||
+        u.name.toLowerCase().replace(/[^a-z0-9]/g, '') === uClean ||
+        (u.nipOrNisn && u.nipOrNisn.replace(/\s+/g, '') === target.usernameOrNip.replace(/\s+/g, ''))
+    );
+    if (user) {
+      user.password = newPassword;
+      setStoredItem('users', [...users]);
+    }
+
+    this.logAction(
+      currentUser,
+      'RESOLVE_PASSWORD_RESET',
+      'Manajemen Pengguna',
+      `Super Admin mereset password akun ${target.name} (${target.usernameOrNip}) ke: ${newPassword}`
+    );
+    return target;
+  }
+
   // --- Students ---
   static getStudents(): Student[] {
     return getStoredItem<Student[]>('students', INITIAL_STUDENTS);
@@ -207,6 +501,39 @@ export class DataService {
       this.logAction(currentUser, 'ADD_STUDENT', 'Peserta Didik', `Menambahkan siswa baru NISN ${student.nisn}: ${student.name}`);
     }
     setStoredItem('students', updated);
+
+    // Auto-create/sync user login account for the student
+    const users = this.getUsers();
+    const cleanU = student.name.toLowerCase().replace(/[^a-z0-9]/g, '');
+    const userIdx = users.findIndex(
+      (u) =>
+        u.id === `usr-std-${student.id}` ||
+        u.id === student.id ||
+        (u.nipOrNisn && u.nipOrNisn === student.nisn) ||
+        (u.username === cleanU && u.role === 'siswa')
+    );
+    if (userIdx >= 0) {
+      users[userIdx].name = student.name;
+      users[userIdx].nipOrNisn = student.nisn;
+      users[userIdx].classId = student.classId;
+      users[userIdx].phone = student.parentPhone || users[userIdx].phone;
+      setStoredItem('users', users);
+    } else {
+      const newUser: User = {
+        id: `usr-std-${student.id}`,
+        name: student.name,
+        email: `${cleanU}@siswa.smanusantara.sch.id`,
+        username: cleanU,
+        password: '123456',
+        role: 'siswa',
+        nipOrNisn: student.nisn,
+        phone: student.parentPhone,
+        status: 'aktif',
+        classId: student.classId,
+      };
+      setStoredItem('users', [newUser, ...users]);
+    }
+
     return student;
   }
 
@@ -304,7 +631,49 @@ export class DataService {
       this.logAction(currentUser, 'ADD_TEACHER', 'Tenaga Pendidik', `Menambahkan data guru baru: ${teacher.name}`);
     }
     setStoredItem('teachers', updated);
+
+    // Auto-link to users collection so the teacher can immediately login using their name without spaces & password 123456
+    const users = this.getUsers();
+    const cleanUName = teacher.name.toLowerCase().replace(/[^a-z0-9]/g, '');
+    const userIdx = users.findIndex((u) => u.id === teacher.id || u.username === cleanUName);
+    if (userIdx >= 0) {
+      const existing = users[userIdx];
+      users[userIdx] = {
+        ...existing,
+        name: teacher.name,
+        email: teacher.email || existing.email,
+        phone: teacher.phone || existing.phone,
+        nipOrNisn: teacher.nip || existing.nipOrNisn,
+        position: teacher.position || existing.position,
+      };
+      setStoredItem('users', users);
+    } else {
+      const newUser: User = {
+        id: teacher.id,
+        name: teacher.name,
+        email: teacher.email || `${cleanUName}@smanusantara.sch.id`,
+        username: cleanUName,
+        password: '123456',
+        role: 'guru',
+        nipOrNisn: teacher.nip,
+        phone: teacher.phone,
+        status: 'aktif',
+        position: teacher.position || 'Guru Mata Pelajaran',
+      };
+      setStoredItem('users', [...users, newUser]);
+    }
+
     return teacher;
+  }
+
+  static deleteTeacher(id: string, currentUser: { id: string; name: string; role: Role }): void {
+    const list = this.getTeachers();
+    const target = list.find((t) => t.id === id);
+    const updated = list.filter((t) => t.id !== id);
+    setStoredItem('teachers', updated);
+    if (target) {
+      this.logAction(currentUser, 'DELETE_TEACHER', 'Tenaga Pendidik', `Menghapus guru: ${target.name} (NIP: ${target.nip})`);
+    }
   }
 
   // --- Classes & Subjects ---
@@ -327,6 +696,16 @@ export class DataService {
     return room;
   }
 
+  static deleteClass(id: string, currentUser: { id: string; name: string; role: Role }): void {
+    const list = this.getClasses();
+    const target = list.find((c) => c.id === id);
+    const updated = list.filter((c) => c.id !== id);
+    setStoredItem('classes', updated);
+    if (target) {
+      this.logAction(currentUser, 'DELETE_CLASS', 'Rombel & Kelas', `Menghapus rombel: ${target.name}`);
+    }
+  }
+
   static getSubjects(): Subject[] {
     return getStoredItem<Subject[]>('subjects', INITIAL_SUBJECTS);
   }
@@ -344,6 +723,16 @@ export class DataService {
     setStoredItem('subjects', updated);
     this.logAction(currentUser, 'SAVE_SUBJECT', 'Mata Pelajaran', `Menyimpan mapel ${subject.name}`);
     return subject;
+  }
+
+  static deleteSubject(id: string, currentUser: { id: string; name: string; role: Role }): void {
+    const list = this.getSubjects();
+    const target = list.find((s) => s.id === id);
+    const updated = list.filter((s) => s.id !== id);
+    setStoredItem('subjects', updated);
+    if (target) {
+      this.logAction(currentUser, 'DELETE_SUBJECT', 'Mata Pelajaran', `Menghapus mapel: ${target.name}`);
+    }
   }
 
   static updateSubjectKKM(
@@ -387,6 +776,16 @@ export class DataService {
     return mod;
   }
 
+  static deleteModule(id: string, currentUser: { id: string; name: string; role: Role }): void {
+    const list = this.getModules();
+    const target = list.find((m) => m.id === id);
+    const updated = list.filter((m) => m.id !== id);
+    setStoredItem('modules', updated);
+    if (target) {
+      this.logAction(currentUser, 'DELETE_MODULE', 'Modul Pembelajaran', `Menghapus modul materi: ${target.title}`);
+    }
+  }
+
   // --- Teaching Journals ---
   static getJournals(): TeachingJournal[] {
     return getStoredItem<TeachingJournal[]>('journals', INITIAL_JOURNALS);
@@ -405,6 +804,16 @@ export class DataService {
     setStoredItem('journals', updated);
     this.logAction(currentUser, 'SAVE_JOURNAL', 'Jurnal Guru', `Jurnal ${journal.subjectName} (${journal.className}) - status: ${journal.status}`);
     return journal;
+  }
+
+  static deleteJournal(id: string, currentUser: { id: string; name: string; role: Role }): void {
+    const list = this.getJournals();
+    const target = list.find((j) => j.id === id);
+    const updated = list.filter((j) => j.id !== id);
+    setStoredItem('journals', updated);
+    if (target) {
+      this.logAction(currentUser, 'DELETE_JOURNAL', 'Jurnal Guru', `Menghapus jurnal pembelajaran: ${target.topic}`);
+    }
   }
 
   static reviewJournal(id: string, status: 'disetujui' | 'revisi', notes: string, currentUser: { id: string; name: string; role: Role }): void {
@@ -454,6 +863,16 @@ export class DataService {
     return assignment;
   }
 
+  static deleteAssignment(id: string, currentUser: { id: string; name: string; role: Role }): void {
+    const list = this.getAssignments();
+    const target = list.find((a) => a.id === id);
+    const updated = list.filter((a) => a.id !== id);
+    setStoredItem('assignments', updated);
+    if (target) {
+      this.logAction(currentUser, 'DELETE_ASSIGNMENT', 'Tugas & Penilaian', `Menghapus tugas: ${target.title}`);
+    }
+  }
+
   static getSubmissions(): AssignmentSubmission[] {
     return getStoredItem<AssignmentSubmission[]>('submissions', INITIAL_SUBMISSIONS);
   }
@@ -463,6 +882,28 @@ export class DataService {
     const updated = list.map((s) => (s.id === id ? { ...s, score, feedback, status: 'graded' as const } : s));
     setStoredItem('submissions', updated);
     this.logAction(currentUser, 'GRADE_SUBMISSION', 'Tugas & Penilaian', `Menilai tugas ID #${id} dengan skor ${score}`);
+  }
+
+  static resetSubmissionGrade(id: string, currentUser: { id: string; name: string; role: Role }): void {
+    const list = this.getSubmissions();
+    const updated = list.map((s) => {
+      if (s.id === id) {
+        const copy = { ...s };
+        delete copy.score;
+        delete copy.feedback;
+        return { ...copy, status: 'pending' as const };
+      }
+      return s;
+    });
+    setStoredItem('submissions', updated);
+    this.logAction(currentUser, 'RESET_GRADE', 'Tugas & Penilaian', `Menghapus penilaian untuk pengumpulan tugas ID #${id}`);
+  }
+
+  static deleteSubmission(id: string, currentUser: { id: string; name: string; role: Role }): void {
+    const list = this.getSubmissions();
+    const updated = list.filter((s) => s.id !== id);
+    setStoredItem('submissions', updated);
+    this.logAction(currentUser, 'DELETE_SUBMISSION', 'Tugas & Penilaian', `Menghapus pengumpulan tugas ID #${id}`);
   }
 
   static submitAssignmentAnswer(sub: AssignmentSubmission, currentUser: { id: string; name: string; role: Role }): AssignmentSubmission {
@@ -493,6 +934,113 @@ export class DataService {
     return exam;
   }
 
+  static deleteExam(id: string, currentUser: { id: string; name: string; role: Role }): void {
+    const list = this.getExams();
+    const target = list.find((e) => e.id === id);
+    const updated = list.filter((e) => e.id !== id);
+    setStoredItem('exams', updated);
+    if (target) {
+      this.logAction(currentUser, 'DELETE_EXAM', 'Ujian Online', `Menghapus kuis/ujian CBT: ${target.title}`);
+    }
+  }
+
+  // --- CBT Student Completions & Scores ---
+  static getCompletedExamIds(studentId: string): string[] {
+    return getStoredItem<string[]>(`cbt_completed_${studentId}`, []);
+  }
+
+  static markExamCompleted(studentId: string, examId: string, score: number): void {
+    const completed = this.getCompletedExamIds(studentId);
+    if (!completed.includes(examId)) {
+      setStoredItem(`cbt_completed_${studentId}`, [...completed, examId]);
+    }
+    const scores = getStoredItem<Record<string, number>>(`cbt_scores_${studentId}`, {});
+    scores[examId] = score;
+    setStoredItem(`cbt_scores_${studentId}`, scores);
+  }
+
+  static getStudentExamScore(studentId: string, examId: string): number | undefined {
+    const scores = getStoredItem<Record<string, number>>(`cbt_scores_${studentId}`, {});
+    return scores[examId];
+  }
+
+  static getExamSubmissions(): ExamSubmission[] {
+    return getStoredItem<ExamSubmission[]>('exam_submissions', []);
+  }
+
+  static saveExamSubmission(sub: ExamSubmission, currentUser: { id: string; name: string; role: Role }): ExamSubmission {
+    const list = this.getExamSubmissions();
+    const filtered = list.filter((s) => !(s.examId === sub.examId && s.studentId === sub.studentId));
+    const updated = [sub, ...filtered];
+    setStoredItem('exam_submissions', updated);
+    this.markExamCompleted(sub.studentId, sub.examId, sub.score);
+    this.logAction(
+      currentUser,
+      'SUBMIT_CBT_EXAM',
+      'Ujian Online CBT',
+      `Siswa ${sub.studentName} menyelesaikan ujian CBT dengan skor ${sub.score}`
+    );
+    return sub;
+  }
+
+  // --- Lesson Period & Duration (JP) Config ---
+  static getLessonPeriodConfig(): LessonPeriodConfig {
+    return getStoredItem<LessonPeriodConfig>('lesson_period_config', INITIAL_LESSON_PERIOD_CONFIG);
+  }
+
+  static computeTimeSlots(config: LessonPeriodConfig): string[] {
+    const slots: string[] = [];
+    const [startH, startM] = config.startTime.split(':').map(Number);
+    let currentMinutes = (isNaN(startH) ? 7 : startH) * 60 + (isNaN(startM) ? 15 : startM);
+
+    const formatTime = (min: number) => {
+      const h = Math.floor(min / 60).toString().padStart(2, '0');
+      const m = (min % 60).toString().padStart(2, '0');
+      return `${h}.${m}`;
+    };
+
+    for (let p = 1; p <= config.totalPeriodsPerDay; p++) {
+      const periodStart = currentMinutes;
+      const periodEnd = periodStart + config.jpDurationMinutes;
+      slots.push(`${formatTime(periodStart)} - ${formatTime(periodEnd)} (Jam Ke-${p})`);
+      currentMinutes = periodEnd;
+
+      // Check for breaks
+      const breakFound = config.breaks.find((b) => b.afterPeriod === p);
+      if (breakFound) {
+        currentMinutes += breakFound.durationMinutes;
+      }
+    }
+    return slots;
+  }
+
+  static saveLessonPeriodConfig(
+    config: LessonPeriodConfig,
+    currentUser: { id: string; name: string; role: Role }
+  ): LessonPeriodConfig {
+    setStoredItem('lesson_period_config', config);
+    this.logAction(
+      currentUser,
+      'UPDATE_LESSON_PERIOD_CONFIG',
+      'Jadwal Pelajaran',
+      `Menetapkan durasi 1 JP = ${config.jpDurationMinutes} menit, mulai pukul ${config.startTime}, total ${config.totalPeriodsPerDay} JP/hari.`
+    );
+
+    // Update existing schedule items to match newly computed time slots
+    const newSlots = this.computeTimeSlots(config);
+    const schedule = this.getSchedule();
+    const updatedSchedule = schedule.map((item) => {
+      const slotIndex = item.period - 1;
+      if (newSlots[slotIndex]) {
+        return { ...item, timeRange: newSlots[slotIndex] };
+      }
+      return item;
+    });
+    setStoredItem('schedule', updatedSchedule);
+
+    return config;
+  }
+
   // --- Schedule ---
   static getSchedule(): ScheduleItem[] {
     return getStoredItem<ScheduleItem[]>('schedule', INITIAL_SCHEDULE);
@@ -512,22 +1060,13 @@ export class DataService {
     const classes = this.getClasses();
     const subjects = this.getSubjects();
     const teachers = this.getTeachers();
+    const jpConfig = this.getLessonPeriodConfig();
+    const timeSlots = this.computeTimeSlots(jpConfig);
 
     const days: ('Senin' | 'Selasa' | 'Rabu' | 'Kamis' | 'Jumat')[] = ['Senin', 'Selasa', 'Rabu', 'Kamis', 'Jumat'];
-    const timeSlots = [
-      '07.15 - 08.00 (Jam Ke-1)',
-      '08.00 - 08.45 (Jam Ke-2)',
-      '08.45 - 09.30 (Jam Ke-3)',
-      '10.00 - 10.45 (Jam Ke-4)',
-      '10.45 - 11.30 (Jam Ke-5)',
-      '11.30 - 12.15 (Jam Ke-6)',
-    ];
 
     const generated: ScheduleItem[] = [];
     let scheduleIdCounter = 1;
-
-    // Track assigned teachers per (day, period) to prevent collision:
-    const teacherSlotOccupied: Record<string, string> = {}; // key: `${day}-${period}-${teacherId}` -> classId
 
     const blocks = this.getScheduleBlocks();
     const activeBlocksMap: Record<string, ScheduleBlockConfig> = {};
@@ -537,35 +1076,20 @@ export class DataService {
       }
     });
 
-    classes.forEach((cls, classIdx) => {
-      // Filter subjects that can be taught in this class:
-      // If a subject's teacher has assignedClassIds specified, check if cls.id is in it.
-      const eligibleSubjects = subjects.filter((s) => {
-        const teacher = teachers.find((t) => t.id === s.teacherId);
-        if (teacher && teacher.assignedClassIds && teacher.assignedClassIds.length > 0) {
-          return teacher.assignedClassIds.includes(cls.id);
-        }
-        return true;
-      });
+    // We build the schedule slot-by-slot (day, period) across all classes simultaneously to guarantee zero collision
+    days.forEach((day) => {
+      timeSlots.forEach((slot, periodIdx) => {
+        const period = periodIdx + 1;
+        const blockKey = `${day}-${period}`;
+        const currentBlock = activeBlocksMap[blockKey];
 
-      const effectiveSubjects = eligibleSubjects.length > 0 ? eligibleSubjects : subjects;
+        // Set of teachers already assigned in this specific slot
+        const busyTeacherIds = new Set<string>();
 
-      // Rotate subject list per class so different classes take different teachers on the same time slot
-      const classSubjects = [...effectiveSubjects].sort((a, b) => {
-        return (a.id + classIdx).localeCompare(b.id + classIdx);
-      });
-
-      let subPointer = 0;
-
-      days.forEach((day) => {
-        timeSlots.forEach((slot, periodIdx) => {
-          const period = periodIdx + 1;
+        classes.forEach((cls, classIdx) => {
           const room = `R.${cls.name.replace(/\s+/g, '')}`;
-          const blockKey = `${day}-${period}`;
-          const currentBlock = activeBlocksMap[blockKey];
 
           if (currentBlock) {
-            // This slot is blocked (e.g. Upacara Bendera or Ibadah Bersama)
             generated.push({
               id: `sch-gen-${Date.now()}-${scheduleIdCounter++}`,
               day,
@@ -584,26 +1108,52 @@ export class DataService {
             return;
           }
 
-          // Find a subject whose teacher is NOT already busy at (day, period)
-          let assignedSubject = classSubjects[subPointer % classSubjects.length];
-          let attempts = 0;
-
-          while (attempts < classSubjects.length) {
-            const cand = classSubjects[(subPointer + attempts) % classSubjects.length];
-            const slotKey = `${day}-${period}-${cand.teacherId}`;
-            if (!teacherSlotOccupied[slotKey]) {
-              assignedSubject = cand;
-              break;
+          // Eligible subjects for this class
+          const eligibleSubjects = subjects.filter((s) => {
+            const teacher = teachers.find((t) => t.id === s.teacherId);
+            if (teacher && teacher.assignedClassIds && teacher.assignedClassIds.length > 0) {
+              return teacher.assignedClassIds.includes(cls.id);
             }
-            attempts++;
+            return true;
+          });
+
+          const classPool = eligibleSubjects.length > 0 ? eligibleSubjects : subjects;
+
+          // Rotate subject order so classes don't request the same teacher simultaneously
+          const rotated = [...classPool].sort((a, b) => {
+            return (a.id + classIdx + period).localeCompare(b.id + classIdx + period);
+          });
+
+          // Pick the first candidate whose teacher is NOT busy in this period
+          let picked = rotated.find((cand) => !busyTeacherIds.has(cand.teacherId));
+
+          if (!picked) {
+            // Pick any other subject from the broader subjects list whose teacher is free
+            picked = subjects.find((cand) => !busyTeacherIds.has(cand.teacherId));
           }
 
-          // Mark slot as occupied
-          const slotKey = `${day}-${period}-${assignedSubject.teacherId}`;
-          teacherSlotOccupied[slotKey] = cls.id;
+          if (!picked) {
+            // Find any teacher in the faculty who is currently free
+            const freeTeacher = teachers.find((t) => !busyTeacherIds.has(t.id));
+            if (freeTeacher) {
+              const matchedSub = subjects.find((s) => s.teacherId === freeTeacher.id) || {
+                id: `sub-free-${freeTeacher.id}`,
+                name: freeTeacher.subjectNames?.[0] || 'Pengembangan Diri / Kokurikuler',
+                teacherId: freeTeacher.id,
+                teacherName: freeTeacher.name,
+              };
+              picked = matchedSub as any;
+            } else {
+              // As absolute fallback, use rotated[0]
+              picked = rotated[0];
+            }
+          }
 
-          const teacher = teachers.find((t) => t.id === assignedSubject.teacherId) || {
-            name: assignedSubject.teacherName,
+          const safePicked = picked || rotated[0] || subjects[0];
+          busyTeacherIds.add(safePicked.teacherId);
+
+          const teacherObj = teachers.find((t) => t.id === safePicked.teacherId) || {
+            name: safePicked.teacherName,
           };
 
           generated.push({
@@ -613,14 +1163,13 @@ export class DataService {
             timeRange: slot,
             classId: cls.id,
             className: cls.name,
-            subjectId: assignedSubject.id,
-            subjectName: assignedSubject.name,
-            teacherId: assignedSubject.teacherId,
-            teacherName: teacher.name,
+            subjectId: safePicked.id,
+            subjectName: safePicked.name,
+            teacherId: safePicked.teacherId,
+            teacherName: teacherObj.name,
             room,
+            isBlocked: false,
           });
-
-          subPointer++;
         });
       });
     });
@@ -636,9 +1185,37 @@ export class DataService {
     return {
       schedule: generated,
       conflictCount: 0,
-      message: `Berhasil men-generate ${generated.length} sesi jadwal anti-bentrok untuk ${classes.length} rombel kelas dengan 0 konflik!`,
+      message: `Berhasil menata ulang jadwal bebas bentrok untuk ${classes.length} rombel (${generated.length} sesi pembelajaran, 0 konflik)!`,
     };
   }
+
+  static resolveScheduleConflicts(currentUser: { id: string; name: string; role: Role }): {
+    schedule: ScheduleItem[];
+    message: string;
+  } {
+    const res = this.generateAntiConflictSchedule(currentUser);
+    return {
+      schedule: res.schedule,
+      message: 'Seluruh bentrok jadwal (0 bentrok) berhasil diselesaikan secara otomatis!',
+    };
+  }
+
+
+
+  static autoResolveConflicts(currentUser: { id: string; name: string; role: Role }): {
+    schedule: ScheduleItem[];
+    resolvedCount: number;
+    message: string;
+  } {
+    const res = this.generateAntiConflictSchedule(currentUser);
+    return {
+      schedule: res.schedule,
+      resolvedCount: 1,
+      message: 'Seluruh bentrok jadwal dan tumpang tindih guru/ruang berhasil dinormalisasi bebas bentrok!',
+    };
+  }
+
+
 
   // --- Parent Communication ---
   static getParentMessages(): ParentMessage[] {
@@ -678,6 +1255,21 @@ export class DataService {
     return record;
   }
 
+  static deleteCounselingRecord(id: string, currentUser: { id: string; name: string; role: Role }): void {
+    const list = this.getCounselingRecords();
+    const target = list.find((c) => c.id === id);
+    const updated = list.filter((c) => c.id !== id);
+    setStoredItem('counseling', updated);
+    if (target) {
+      this.logAction(
+        currentUser,
+        'DELETE_COUNSELING',
+        'Bimbingan Konseling',
+        `Menghapus catatan konseling siswa: ${target.studentName}`
+      );
+    }
+  }
+
   // --- Announcements & Notifications ---
   static getAnnouncements(): Announcement[] {
     return getStoredItem<Announcement[]>('announcements', INITIAL_ANNOUNCEMENTS);
@@ -706,57 +1298,6 @@ export class DataService {
     setStoredItem('announcements', updated);
     if (target) {
       this.logAction(currentUser, 'DELETE_ANNOUNCEMENT', 'Pengumuman', `Menghapus pengumuman: ${target.title}`);
-    }
-  }
-
-  // --- Deletion methods for PTK, Rombel, Mapel, Module, Assignment ---
-  static deleteTeacher(id: string, currentUser: { id: string; name: string; role: Role }): void {
-    const list = this.getTeachers();
-    const target = list.find((t) => t.id === id);
-    const updated = list.filter((t) => t.id !== id);
-    setStoredItem('teachers', updated);
-    if (target) {
-      this.logAction(currentUser, 'DELETE_TEACHER', 'Tenaga Pendidik', `Menghapus guru: ${target.name}`);
-    }
-  }
-
-  static deleteClass(id: string, currentUser: { id: string; name: string; role: Role }): void {
-    const list = this.getClasses();
-    const target = list.find((c) => c.id === id);
-    const updated = list.filter((c) => c.id !== id);
-    setStoredItem('classes', updated);
-    if (target) {
-      this.logAction(currentUser, 'DELETE_CLASS', 'Rombel & Kelas', `Menghapus kelas: ${target.name}`);
-    }
-  }
-
-  static deleteSubject(id: string, currentUser: { id: string; name: string; role: Role }): void {
-    const list = this.getSubjects();
-    const target = list.find((s) => s.id === id);
-    const updated = list.filter((s) => s.id !== id);
-    setStoredItem('subjects', updated);
-    if (target) {
-      this.logAction(currentUser, 'DELETE_SUBJECT', 'Mata Pelajaran', `Menghapus mata pelajaran: ${target.name}`);
-    }
-  }
-
-  static deleteModule(id: string, currentUser: { id: string; name: string; role: Role }): void {
-    const list = this.getModules();
-    const target = list.find((m) => m.id === id);
-    const updated = list.filter((m) => m.id !== id);
-    setStoredItem('modules', updated);
-    if (target) {
-      this.logAction(currentUser, 'DELETE_MODULE', 'Modul Pembelajaran', `Menghapus modul pembelajaran: ${target.title}`);
-    }
-  }
-
-  static deleteAssignment(id: string, currentUser: { id: string; name: string; role: Role }): void {
-    const list = this.getAssignments();
-    const target = list.find((a) => a.id === id);
-    const updated = list.filter((a) => a.id !== id);
-    setStoredItem('assignments', updated);
-    if (target) {
-      this.logAction(currentUser, 'DELETE_ASSIGNMENT', 'Tugas & Penilaian', `Menghapus tugas pembelajaran: ${target.title}`);
     }
   }
 
@@ -805,6 +1346,21 @@ export class DataService {
       `Guru ${msg.teacherName} mengirim pesan (${msg.title}) ke kelas ${msg.className}`
     );
     return msg;
+  }
+
+  static deleteTeacherStudentMessage(id: string, currentUser: { id: string; name: string; role: Role }): void {
+    const list = this.getTeacherStudentMessages();
+    const target = list.find((m) => m.id === id);
+    const updated = list.filter((m) => m.id !== id);
+    setStoredItem('teacher_student_messages', updated);
+    if (target) {
+      this.logAction(
+        currentUser,
+        'DELETE_TEACHER_STUDENT_MSG',
+        'Pesan Guru ke Siswa',
+        `Menghapus pesan guru ke siswa: ${target.title}`
+      );
+    }
   }
 
   // --- Schedule Blocks (Upacara, Ibadah, dsb) ---

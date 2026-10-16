@@ -139,6 +139,119 @@ export const SubjectsView: React.FC = () => {
     setIsModalOpen(false);
   };
 
+  if (currentUser.role === 'siswa') {
+    const studentClass = DataService.getClasses().find((c) => c.id === currentUser.classId) || DataService.getClasses()[0];
+    const gradeNumber = studentClass.grade || 'X';
+
+    // Filter subjects for the student's class grade
+    const classSubjects = subjects.filter(
+      (s) => s.grade === gradeNumber || s.name.toLowerCase().includes(searchQuery.toLowerCase()) || s.code.toLowerCase().includes(searchQuery.toLowerCase())
+    );
+
+    const studentFiltered = classSubjects.filter((s) => {
+      if (!searchQuery.trim()) return true;
+      const q = searchQuery.toLowerCase();
+      return s.name.toLowerCase().includes(q) || s.code.toLowerCase().includes(q) || s.teacherName.toLowerCase().includes(q);
+    });
+
+    return (
+      <div className="space-y-6">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+          <div>
+            <div className="flex items-center gap-2 mb-1">
+              <span className="px-2.5 py-0.5 rounded text-[11px] font-bold bg-indigo-50 dark:bg-indigo-950 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800">
+                Rombel: {studentClass.name} (Tingkat {studentClass.grade} {studentClass.major})
+              </span>
+            </div>
+            <h2 className="text-lg font-bold text-slate-900 dark:text-white flex items-center gap-2">
+              <BookMarked className="w-5 h-5 text-indigo-600" />
+              <span>Mata Pelajaran & Guru Pengampu Kelas Saya</span>
+            </h2>
+            <p className="text-xs text-slate-500">
+              Daftar mata pelajaran yang Anda tempuh pada kelas {studentClass.name} beserta guru pengampu dan patokan KKM.
+            </p>
+          </div>
+        </div>
+
+        <div className="p-4 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 flex items-center gap-3 text-xs shadow-2xs">
+          <Search className="w-4 h-4 text-slate-400" />
+          <input
+            type="text"
+            placeholder="Cari mata pelajaran atau nama guru pengampu..."
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            className="w-full bg-transparent text-slate-900 dark:text-white focus:outline-hidden"
+          />
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+          {studentFiltered.map((sub) => {
+            const assignedTeacher = teachers.find(
+              (t) =>
+                t.assignedClassIds?.includes(studentClass.id) &&
+                t.subjectNames?.includes(sub.name)
+            ) || teachers.find((t) => t.id === sub.teacherId || t.name === sub.teacherName) || teachers[0];
+
+            return (
+              <div
+                key={sub.id}
+                className="p-5 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-2xs space-y-4 hover:border-indigo-300 dark:hover:border-indigo-800 transition-all flex flex-col justify-between"
+              >
+                <div>
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="font-mono text-[11px] font-bold px-2 py-0.5 rounded bg-indigo-50 dark:bg-indigo-950 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800">
+                      {sub.code}
+                    </span>
+                    <span className="text-[11px] font-mono text-slate-500 font-bold">
+                      {sub.hoursPerWeek} JP / Minggu
+                    </span>
+                  </div>
+
+                  <h3 className="font-bold text-sm text-slate-900 dark:text-white mt-2">
+                    {sub.name}
+                  </h3>
+                  <p className="text-[11px] text-slate-500">
+                    Tingkat Kelas {sub.grade}
+                  </p>
+                </div>
+
+                <div className="space-y-3 pt-3 border-t border-slate-100 dark:border-slate-800 text-xs">
+                  <div className="p-3 rounded-lg bg-slate-50 dark:bg-slate-800/60 border border-slate-200/80 dark:border-slate-700/80 space-y-1">
+                    <span className="text-[10px] uppercase font-bold text-indigo-600 dark:text-indigo-400 block">
+                      Guru Pengampu Kelas {studentClass.name}:
+                    </span>
+                    <p className="font-bold text-slate-900 dark:text-white text-xs">
+                      {assignedTeacher ? assignedTeacher.name : sub.teacherName}
+                    </p>
+                    {assignedTeacher?.nip && (
+                      <p className="text-[10px] font-mono text-slate-500">
+                        NIP. {assignedTeacher.nip}
+                      </p>
+                    )}
+                    {assignedTeacher?.phone && (
+                      <p className="text-[10px] text-slate-500">
+                        Kontak: {assignedTeacher.phone}
+                      </p>
+                    )}
+                  </div>
+
+                  <div className="flex items-center justify-between">
+                    <span className="text-slate-600 dark:text-slate-400 font-medium text-[11px]">
+                      Ambang KKM:
+                    </span>
+                    <span className="px-2.5 py-0.5 rounded-md font-mono font-bold text-xs bg-emerald-50 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800">
+                      KKM {sub.kkm}
+                    </span>
+                  </div>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-6">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">

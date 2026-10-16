@@ -150,6 +150,206 @@ export const AttendanceView: React.FC = () => {
 
   const currentClassName = classes.find((c) => c.id === selectedClassId)?.name || 'X MIPA 1';
 
+  if (currentUser.role === 'siswa') {
+    const student = students.find(
+      (s) =>
+        s.id === currentUser.id ||
+        (s.nisn && s.nisn === currentUser.nipOrNisn) ||
+        s.name.toLowerCase().replace(/[^a-z0-9]/g, '') === currentUser.username
+    ) || students[0];
+
+    const myHistory: {
+      date: string;
+      subjectName: string;
+      className: string;
+      status: 'H' | 'S' | 'I' | 'A' | 'T';
+      note?: string;
+    }[] = [];
+
+    existingAttendances.forEach((att) => {
+      const rec = att.records.find((r) => r.studentId === student.id || r.studentName === student.name);
+      if (rec) {
+        myHistory.push({
+          date: att.date,
+          subjectName: att.subjectName || 'Presensi Harian',
+          className: att.className,
+          status: rec.status,
+          note: rec.note,
+        });
+      }
+    });
+
+    const attSummary = student?.attendance || {
+      hadir: myHistory.filter((h) => h.status === 'H').length || 52,
+      sakit: myHistory.filter((h) => h.status === 'S').length || 1,
+      izin: myHistory.filter((h) => h.status === 'I').length || 0,
+      alpa: myHistory.filter((h) => h.status === 'A').length || 0,
+      terlambat: myHistory.filter((h) => h.status === 'T').length || 0,
+    };
+
+    const totalDays = attSummary.hadir + attSummary.sakit + attSummary.izin + attSummary.alpa;
+    const attPct = totalDays > 0 ? Math.round((attSummary.hadir / totalDays) * 100) : 98;
+
+    return (
+      <div className="space-y-6">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+          <div>
+            <h2 className="text-lg font-bold text-slate-900 dark:text-white flex items-center gap-2">
+              <CalendarCheck className="w-5 h-5 text-indigo-600" />
+              <span>Rekapitulasi Kehadiran Presensi Saya</span>
+            </h2>
+            <p className="text-xs text-slate-500">
+              Laporan kehadiran Anda di kelas {student.className} (NISN: {student.nisn}). Anda hanya dapat melihat data kehadiran Anda sendiri demi menjaga privasi siswa.
+            </p>
+          </div>
+          <button
+            onClick={() => setPrintOpen(true)}
+            className="flex items-center gap-1.5 px-3 py-2 text-xs font-semibold rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 hover:bg-slate-50 cursor-pointer self-start sm:self-auto"
+          >
+            <Printer className="w-4 h-4 text-slate-500" />
+            <span>Cetak Rekap Presensi Saya</span>
+          </button>
+        </div>
+
+        {/* 6 Status Cards */}
+        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 gap-3">
+          <div className="p-3.5 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-2xs">
+            <span className="text-[11px] font-semibold text-slate-500">Persentase</span>
+            <p className="text-xl font-bold text-emerald-600 font-mono mt-0.5">{attPct}%</p>
+            <span className="text-[10px] text-emerald-600 font-medium">Tingkat Kehadiran</span>
+          </div>
+          <div className="p-3.5 rounded-xl bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800 shadow-2xs">
+            <span className="text-[11px] font-semibold text-emerald-800 dark:text-emerald-300">Hadir (H)</span>
+            <p className="text-xl font-bold text-emerald-700 dark:text-emerald-200 font-mono mt-0.5">{attSummary.hadir}</p>
+            <span className="text-[10px] text-emerald-600">Hari Masuk</span>
+          </div>
+          <div className="p-3.5 rounded-xl bg-blue-50 dark:bg-blue-950/40 border border-blue-200 dark:border-blue-800 shadow-2xs">
+            <span className="text-[11px] font-semibold text-blue-800 dark:text-blue-300">Sakit (S)</span>
+            <p className="text-xl font-bold text-blue-700 dark:text-blue-200 font-mono mt-0.5">{attSummary.sakit}</p>
+            <span className="text-[10px] text-blue-600">Surat Dokter</span>
+          </div>
+          <div className="p-3.5 rounded-xl bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800 shadow-2xs">
+            <span className="text-[11px] font-semibold text-amber-800 dark:text-amber-300">Izin (I)</span>
+            <p className="text-xl font-bold text-amber-700 dark:text-amber-200 font-mono mt-0.5">{attSummary.izin}</p>
+            <span className="text-[10px] text-amber-600">Izin Resmi</span>
+          </div>
+          <div className="p-3.5 rounded-xl bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-800 shadow-2xs">
+            <span className="text-[11px] font-semibold text-rose-800 dark:text-rose-300">Alpa (A)</span>
+            <p className="text-xl font-bold text-rose-700 dark:text-rose-200 font-mono mt-0.5">{attSummary.alpa}</p>
+            <span className="text-[10px] text-rose-600">Tanpa Keterangan</span>
+          </div>
+          <div className="p-3.5 rounded-xl bg-purple-50 dark:bg-purple-950/40 border border-purple-200 dark:border-purple-800 shadow-2xs">
+            <span className="text-[11px] font-semibold text-purple-800 dark:text-purple-300">Terlambat (T)</span>
+            <p className="text-xl font-bold text-purple-700 dark:text-purple-200 font-mono mt-0.5">{attSummary.terlambat}</p>
+            <span className="text-[10px] text-purple-600">Masuk Jam Ke-2+</span>
+          </div>
+        </div>
+
+        {/* History Table */}
+        <div className="p-5 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-2xs space-y-3">
+          <h3 className="font-bold text-sm text-slate-900 dark:text-white">
+            Riwayat Presensi Pribadi Anda
+          </h3>
+          <div className="overflow-x-auto">
+            <table className="w-full text-left text-xs border-collapse">
+              <thead>
+                <tr className="border-b border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-800/60 text-slate-600 dark:text-slate-300 font-semibold">
+                  <th className="py-2.5 px-3">Tanggal</th>
+                  <th className="py-2.5 px-3">Mata Pelajaran</th>
+                  <th className="py-2.5 px-3">Kelas</th>
+                  <th className="py-2.5 px-3 text-center">Status Kehadiran</th>
+                  <th className="py-2.5 px-3">Keterangan</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100 dark:divide-slate-800/60">
+                {myHistory.length === 0 ? (
+                  <tr>
+                    <td colSpan={5} className="py-6 text-center text-slate-400 italic">
+                      Belum ada catatan presensi detail untuk akun Anda.
+                    </td>
+                  </tr>
+                ) : (
+                  myHistory.map((item, idx) => (
+                    <tr key={idx} className="hover:bg-slate-50/70 dark:hover:bg-slate-800/40">
+                      <td className="py-2.5 px-3 font-mono text-slate-500">{item.date}</td>
+                      <td className="py-2.5 px-3 font-semibold text-slate-900 dark:text-white">{item.subjectName}</td>
+                      <td className="py-2.5 px-3 text-slate-600 dark:text-slate-400">{item.className}</td>
+                      <td className="py-2.5 px-3 text-center">
+                        <span
+                          className={`inline-block px-2 py-0.5 rounded font-bold text-[11px] ${
+                            item.status === 'H'
+                              ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300'
+                              : item.status === 'S'
+                              ? 'bg-blue-100 text-blue-800 dark:bg-blue-950 dark:text-blue-300'
+                              : item.status === 'I'
+                              ? 'bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300'
+                              : item.status === 'T'
+                              ? 'bg-purple-100 text-purple-800 dark:bg-purple-950 dark:text-purple-300'
+                              : 'bg-rose-100 text-rose-800 dark:bg-rose-950 dark:text-rose-300'
+                          }`}
+                        >
+                          {item.status === 'H' ? 'HADIR' : item.status === 'S' ? 'SAKIT' : item.status === 'I' ? 'IZIN' : item.status === 'T' ? 'TERLAMBAT' : 'ALPA'}
+                        </span>
+                      </td>
+                      <td className="py-2.5 px-3 text-slate-500">{item.note || '-'}</td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        {/* Print Modal for Student */}
+        <PrintModal
+          isOpen={printOpen}
+          onClose={() => setPrintOpen(false)}
+          title="Cetak Rekap Presensi Siswa"
+          documentTitle="LEMBAR REKAPITULASI PRESENSI PESERTA DIDIK"
+          documentNumber={`421.1 / ATT / ${student.nisn} / 2024`}
+          rightSignerTitle="Wali Kelas"
+          rightSignerName="Budi Santoso, S.Si."
+          rightSignerNip="19820311 200801 1 007"
+        >
+          <div className="space-y-4 text-xs">
+            <div className="grid grid-cols-2 gap-2 border-b border-black pb-2">
+              <div>
+                <p>Nama Siswa: <strong>{student.name}</strong></p>
+                <p>NISN / NIS: <strong>{student.nisn} / {student.nis}</strong></p>
+              </div>
+              <div>
+                <p>Kelas / Rombel: <strong>{student.className}</strong></p>
+                <p>Semester / Tahun Ajaran: <strong>Ganjil 2024/2025</strong></p>
+              </div>
+            </div>
+            <table className="w-full border-collapse border border-black text-xs">
+              <thead>
+                <tr className="bg-slate-100">
+                  <th className="border border-black py-2 px-3 text-center">Hadir (H)</th>
+                  <th className="border border-black py-2 px-3 text-center">Sakit (S)</th>
+                  <th className="border border-black py-2 px-3 text-center">Izin (I)</th>
+                  <th className="border border-black py-2 px-3 text-center">Alpa (A)</th>
+                  <th className="border border-black py-2 px-3 text-center">Terlambat (T)</th>
+                  <th className="border border-black py-2 px-3 text-center">% Kehadiran</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td className="border border-black py-2 px-3 text-center font-bold">{attSummary.hadir} Hari</td>
+                  <td className="border border-black py-2 px-3 text-center">{attSummary.sakit} Hari</td>
+                  <td className="border border-black py-2 px-3 text-center">{attSummary.izin} Hari</td>
+                  <td className="border border-black py-2 px-3 text-center">{attSummary.alpa} Hari</td>
+                  <td className="border border-black py-2 px-3 text-center">{attSummary.terlambat} Hari</td>
+                  <td className="border border-black py-2 px-3 text-center font-bold text-emerald-800">{attPct}%</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </PrintModal>
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-6">
       {/* Header */}

@@ -126,6 +126,8 @@ export interface Subject {
   teacherId: string;
   teacherName: string;
   hoursPerWeek: number;
+  classIds?: string[]; // Rombel mana saja yang diajar guru ini untuk mapel ini
+  classNames?: string[]; // Nama rombel (misal: ['X MIPA 1', 'X MIPA 2'])
 }
 
 export interface LearningMaterial {
@@ -245,13 +247,16 @@ export interface OnlineExam {
   className: string;
   teacherId: string;
   title: string;
-  type: 'Kuis Harian' | 'Penilaian Tengah Semester' | 'Penilaian Akhir Semester';
+  type: 'Kuis Harian' | 'Penilaian Tengah Semester' | 'Penilaian Akhir Semester' | 'Remedial CBT';
   durationMinutes: number;
   startDate: string;
   endDate: string;
   totalPoints: number;
   questions: ExamQuestion[];
   published: boolean;
+  isRemedial?: boolean;
+  remedialForExamId?: string;
+  targetStudentIds?: string[]; // IDs siswa khusus yang berhak mengikuti remedial
 }
 
 export interface ExamSubmission {
@@ -338,6 +343,7 @@ export interface SchoolProfile {
   province: string;
   postalCode: string;
   phone: string;
+  adminWhatsapp?: string; // Nomor WhatsApp / kontak Super Admin untuk bantuan reset password
   email: string;
   website: string;
   principalName: string;
@@ -373,3 +379,31 @@ export interface AuditLog {
   module: string;
   details: string;
 }
+
+export interface BreakConfig {
+  afterPeriod: number;
+  durationMinutes: number;
+  name: string;
+}
+
+export interface LessonPeriodConfig {
+  jpDurationMinutes: number; // Durasi 1 JP (default: 45 menit)
+  startTime: string; // Waktu mulai (default: '07:15')
+  defaultJpPerMeeting: number; // default: 2 (2 JP per sesi/pertemuan)
+  totalPeriodsPerDay: number; // default: 8
+  breaks: BreakConfig[];
+}
+
+export interface PasswordResetRequest {
+  id: string;
+  name: string;
+  usernameOrNip: string;
+  whatsappNumber: string;
+  role?: string;
+  requestedAt: string;
+  status: 'pending' | 'resolved';
+  resolvedAt?: string;
+  resolvedBy?: string;
+  newPasswordGenerated?: string;
+}
+

@@ -15,7 +15,7 @@ import { AttendanceView } from './views/AttendanceView';
 import { TeachingJournalsView } from './views/TeachingJournalsView';
 import { AssignmentsView } from './views/AssignmentsView';
 import { ExamsView } from './views/ExamsView';
-import { ScheduleView } from './views/ScheduleView';
+import { UsersView } from './views/UsersView';
 import { CounselingView } from './views/CounselingView';
 import { ParentPortalView } from './views/ParentPortalView';
 import { AnalyticsView } from './views/AnalyticsView';
@@ -23,12 +23,8 @@ import { AnnouncementsView } from './views/AnnouncementsView';
 import { SchoolSettingsView } from './views/SchoolSettingsView';
 import { LoginView } from './views/LoginView';
 
-const MainAppContent: React.FC = () => {
-  const { currentUser, canAccess, isAuthenticated } = useAuth();
-
-  if (!isAuthenticated) {
-    return <LoginView />;
-  }
+const AuthenticatedApp: React.FC = () => {
+  const { currentUser, canAccess } = useAuth();
 
   const [activeTab, setActiveTab] = useState('dashboard');
   // Default to collapsed so that it auto-expands when hovered by cursor
@@ -71,7 +67,7 @@ const MainAppContent: React.FC = () => {
       journals: 'journals',
       assignments: 'assignments',
       exams: 'exams',
-      schedule: 'schedule',
+      users: 'users',
       students: 'students',
       teachers: 'teachers',
       classes: 'classes',
@@ -113,8 +109,8 @@ const MainAppContent: React.FC = () => {
         return <AssignmentsView />;
       case 'exams':
         return <ExamsView />;
-      case 'schedule':
-        return <ScheduleView />;
+      case 'users':
+        return <UsersView />;
       case 'counseling':
         return <CounselingView />;
       case 'parent_portal':
@@ -177,10 +173,20 @@ const MainAppContent: React.FC = () => {
   );
 };
 
+function MainContent() {
+  const { isAuthenticated } = useAuth();
+
+  if (!isAuthenticated) {
+    return <LoginView key="login-view" />;
+  }
+
+  return <AuthenticatedApp key="auth-app" />;
+}
+
 export default function App() {
   return (
     <AuthProvider>
-      <MainAppContent />
+      <MainContent />
     </AuthProvider>
   );
 }

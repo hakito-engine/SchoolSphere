@@ -23,6 +23,7 @@ import {
   Mail,
   User,
   ShieldCheck,
+  ShieldAlert,
   HeartHandshake,
   Edit2,
   Trash2,
@@ -105,6 +106,11 @@ export const ParentPortalView: React.FC<ParentPortalViewProps> = ({ initialTab =
 
   // Filtered parent messages list
   const filteredMessages = parentMessages.filter((msg) => {
+    // Requirement 4: Guru hanya bisa melihat pesan yang dikirim oleh guru yang bersangkutan
+    if (currentUser.role === 'guru' && msg.senderId !== currentUser.id) {
+      return false;
+    }
+
     // If logged in as Orang Tua: show messages specifically for their children!
     if (isParentOnly) {
       const childNames = myChildren.map((c) => c.name.toLowerCase());
@@ -125,10 +131,44 @@ export const ParentPortalView: React.FC<ParentPortalViewProps> = ({ initialTab =
     return matchesSearch && matchesCategory;
   });
 
+  // Requirement 4 & 6: Teacher to Student Messages filtered strictly
+  const filteredTeacherMessages = teacherMessages.filter((msg) => {
+    // Requirement 6: Super Admin tidak bisa melihat pesan dari guru ke siswa
+    if (currentUser.role === 'super_admin') {
+      return false;
+    }
+
+    // Requirement 4: Guru hanya bisa melihat pesan yang dikirim oleh guru yang bersangkutan
+    if (currentUser.role === 'guru') {
+      return msg.teacherId === currentUser.id;
+    }
+
+    // Siswa hanya melihat pesan untuk kelasnya atau khusus dirinya
+    if (currentUser.role === 'siswa') {
+      return (
+        (!msg.classId || msg.classId === currentUser.classId) &&
+        (msg.isBroadcastToClass || msg.targetStudentId === currentUser.id)
+      );
+    }
+
+    return true;
+  });
+
   // Editing existing message state
   const [editingMessage, setEditingMessage] = useState<ParentMessage | null>(null);
 
   const canManageAnyMessage = ['super_admin', 'wali_kelas', 'wakasek_kurikulum'].includes(currentUser.role);
+
+  const handleDeleteTeacherMessage = (id: string, title: string) => {
+    if (confirm(`Apakah Anda yakin ingin menghapus pesan "${title}"?`)) {
+      DataService.deleteTeacherStudentMessage(id, {
+        id: currentUser.id,
+        name: currentUser.name,
+        role: currentUser.role,
+      });
+      setTeacherMessages(DataService.getTeacherStudentMessages());
+    }
+  };
 
   const handleOpenCompose = (preselectedStudent?: Student) => {
     setEditingMessage(null);
@@ -295,7 +335,7 @@ export const ParentPortalView: React.FC<ParentPortalViewProps> = ({ initialTab =
           <Mail className="w-4 h-4" />
           <span>Pesan Guru ke Siswa</span>
           <span className="ml-1 text-[10px] font-mono bg-slate-100 dark:bg-slate-800 px-2 py-0.5 rounded-full">
-            {teacherMessages.length}
+            {filteredTeacherMessages.length}
           </span>
         </button>
 
@@ -508,46 +548,78 @@ export const ParentPortalView: React.FC<ParentPortalViewProps> = ({ initialTab =
             )}
           </div>
 
-          <div className="rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 overflow-hidden shadow-2xs">
-            <div className="overflow-x-auto">
-              <table className="w-full text-left border-collapse text-xs">
-                <thead>
-                  <tr className="bg-slate-50 dark:bg-slate-800/60 border-b border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-300 font-semibold">
-                    <th className="py-3 px-4">Waktu</th>
-                    <th className="py-3 px-4">Guru & Mapel</th>
-                    <th className="py-3 px-4">Rombel / Penerima</th>
-                    <th className="py-3 px-4">Kategori</th>
-                    <th className="py-3 px-4">Judul Pesan</th>
-                    <th className="py-3 px-4">Isi Pesan</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-100 dark:divide-slate-800/60">
-                  {teacherMessages.map((msg) => (
-                    <tr key={msg.id} className="hover:bg-slate-50/70 dark:hover:bg-slate-800/40">
-                      <td className="py-3 px-4 font-mono text-slate-500 whitespace-nowrap">{msg.sentAt}</td>
-                      <td className="py-3 px-4">
-                        <span className="font-bold text-slate-900 dark:text-white block">{msg.teacherName}</span>
-                        <span className="text-[10px] text-indigo-600 dark:text-indigo-400 font-semibold">{msg.subjectName}</span>
-                      </td>
-                      <td className="py-3 px-4">
-                        <span className="font-bold text-slate-800 dark:text-slate-200 block">{msg.className}</span>
-                        <span className="text-[10px] text-slate-400">
-                          {msg.isBroadcastToClass ? 'Seluruh Siswa Satu Kelas' : `Personal: ${msg.targetStudentName}`}
-                        </span>
-                      </td>
-                      <td className="py-3 px-4">
-                        <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-indigo-50 text-indigo-700 dark:bg-indigo-950 dark:text-indigo-300">
-                          {msg.category}
-                        </span>
-                      </td>
-                      <td className="py-3 px-4 font-bold text-slate-900 dark:text-white">{msg.title}</td>
-                      <td className="py-3 px-4 text-slate-600 dark:text-slate-300 max-w-xs truncate">{msg.content}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+          {currentUser.role === 'super_admin' ? (
+            <div className="p-6 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 text-center space-y-2">
+              <ShieldAlert className="w-8 h-8 text-indigo-500 mx-auto" />
+              <h4 className="font-bold text-sm text-slate-800 dark:text-slate-200">
+                Pesan Guru ke Siswa Bersifat Privat
+              </h4>
+              <p className="text-xs text-slate-500 max-w-md mx-auto leading-relaxed">
+                Sesuai kebijakan privasi sistem, Super Admin tidak memiliki akses melihat pesan dari guru ke siswa. Komunikasi ini hanya dapat diakses oleh Guru pengampu dan Siswa penerima yang bersangkutan.
+              </p>
             </div>
-          </div>
+          ) : (
+            <div className="rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 overflow-hidden shadow-2xs">
+              <div className="overflow-x-auto">
+                <table className="w-full text-left border-collapse text-xs">
+                  <thead>
+                    <tr className="bg-slate-50 dark:bg-slate-800/60 border-b border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-300 font-semibold">
+                      <th className="py-3 px-4">Waktu</th>
+                      <th className="py-3 px-4">Guru & Mapel</th>
+                      <th className="py-3 px-4">Rombel / Penerima</th>
+                      <th className="py-3 px-4">Kategori</th>
+                      <th className="py-3 px-4">Judul Pesan</th>
+                      <th className="py-3 px-4">Isi Pesan</th>
+                      <th className="py-3 px-4 text-right">Aksi</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100 dark:divide-slate-800/60">
+                    {filteredTeacherMessages.length === 0 ? (
+                      <tr>
+                        <td colSpan={7} className="py-8 text-center text-slate-400 italic">
+                          Belum ada pesan yang dikirim atau diterima.
+                        </td>
+                      </tr>
+                    ) : (
+                      filteredTeacherMessages.map((msg) => (
+                        <tr key={msg.id} className="hover:bg-slate-50/70 dark:hover:bg-slate-800/40">
+                          <td className="py-3 px-4 font-mono text-slate-500 whitespace-nowrap">{msg.sentAt}</td>
+                          <td className="py-3 px-4">
+                            <span className="font-bold text-slate-900 dark:text-white block">{msg.teacherName}</span>
+                            <span className="text-[10px] text-indigo-600 dark:text-indigo-400 font-semibold">{msg.subjectName}</span>
+                          </td>
+                          <td className="py-3 px-4">
+                            <span className="font-bold text-slate-800 dark:text-slate-200 block">{msg.className}</span>
+                            <span className="text-[10px] text-slate-400">
+                              {msg.isBroadcastToClass ? 'Seluruh Siswa Satu Kelas' : `Personal: ${msg.targetStudentName}`}
+                            </span>
+                          </td>
+                          <td className="py-3 px-4">
+                            <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-indigo-50 text-indigo-700 dark:bg-indigo-950 dark:text-indigo-300">
+                              {msg.category}
+                            </span>
+                          </td>
+                          <td className="py-3 px-4 font-bold text-slate-900 dark:text-white">{msg.title}</td>
+                          <td className="py-3 px-4 text-slate-600 dark:text-slate-300 max-w-xs truncate">{msg.content}</td>
+                          <td className="py-3 px-4 text-right whitespace-nowrap">
+                            {(currentUser.role === 'guru' || currentUser.id === msg.teacherId) && (
+                              <button
+                                onClick={() => handleDeleteTeacherMessage(msg.id, msg.title)}
+                                className="p-1.5 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/40 transition-colors cursor-pointer"
+                                title="Hapus Pesan Ini"
+                              >
+                                <Trash2 className="w-4 h-4" />
+                              </button>
+                            )}
+                          </td>
+                        </tr>
+                      ))
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
 
           {/* Modal Compose Teacher-Student Message */}
           {isTeacherComposeOpen && (

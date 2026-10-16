@@ -59,9 +59,19 @@ export const PrintModal: React.FC<PrintModalProps> = ({
     }
   }
 
+  const isCurriculumSigner =
+    (rightSignerTitle && (rightSignerTitle.toLowerCase().includes('kurikulum') || rightSignerTitle.toLowerCase().includes('wakil'))) ||
+    (leftSignerTitle && (leftSignerTitle.toLowerCase().includes('kurikulum') || leftSignerTitle.toLowerCase().includes('wakil')));
+
   const finalRightTitle = rightSignerTitle || leftSignerTitle || 'Guru Pengampu / Wali Kelas';
-  const finalRightName = rightSignerName || leftSignerName || 'Budi Santoso, S.Si.';
-  const finalRightNip = rightSignerNip || leftSignerNip || '19820311 200801 1 007';
+  const finalRightName =
+    (isCurriculumSigner && profile.vicePrincipalCurriculumName)
+      ? profile.vicePrincipalCurriculumName
+      : (rightSignerName || leftSignerName || 'Budi Santoso, S.Si.');
+  const finalRightNip =
+    (isCurriculumSigner && profile.vicePrincipalCurriculumNip)
+      ? profile.vicePrincipalCurriculumNip
+      : (rightSignerNip || leftSignerNip || '19820311 200801 1 007');
 
   const handlePrint = () => {
     window.print();

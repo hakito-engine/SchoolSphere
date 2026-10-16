@@ -246,7 +246,7 @@ export const TeachingJournalsView: React.FC = () => {
                     {j.status}
                   </span>
 
-                  {['super_admin', 'kepala_sekolah'].includes(currentUser.role) && (
+                  {currentUser.role === 'kepala_sekolah' && (
                     <button
                       onClick={() => handleOpenReview(j)}
                       className="px-2.5 py-1 text-xs font-semibold rounded bg-indigo-50 hover:bg-indigo-100 dark:bg-indigo-950 text-indigo-700 dark:text-indigo-300 transition-colors cursor-pointer"

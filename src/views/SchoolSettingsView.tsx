@@ -13,6 +13,7 @@ import {
   RotateCcw,
   ShieldCheck,
   Eye,
+  EyeOff,
   Calendar,
   Image as ImageIcon,
   Building,
@@ -22,17 +23,30 @@ import {
   Sparkles,
   RefreshCw,
   Plus,
+  KeyRound,
+  MessageCircle,
+  UserCheck,
 } from 'lucide-react';
 
 export const SchoolSettingsView: React.FC = () => {
-  const { currentUser } = useAuth();
+  const { currentUser, updateCurrentUser } = useAuth();
   const [profile, setProfile] = useState<SchoolProfile>(() => DataService.getSchoolProfile());
   const [academicYears, setAcademicYears] = useState<AcademicYearConfig[]>(() => DataService.getAcademicYears());
   const [auditLogs, setAuditLogs] = useState<AuditLog[]>(() => DataService.getAuditLogs());
 
-  const [activeTab, setActiveTab] = useState<'profil' | 'kop_surat' | 'tahun_ajaran' | 'tanggal_dokumen' | 'database_mysql' | 'backup' | 'audit'>('profil');
+  const [activeTab, setActiveTab] = useState<'profil' | 'admin_account' | 'kop_surat' | 'tahun_ajaran' | 'tanggal_dokumen' | 'database_mysql' | 'backup' | 'audit'>('profil');
   const [saveSuccess, setSaveSuccess] = useState(false);
   const [saveMessage, setSaveMessage] = useState('Pengaturan berhasil disimpan dan diperbarui di seluruh dokumen cetak.');
+
+  // Super Admin Account Settings State (Antisipasi Pergantian Admin)
+  const currentAdminUser = DataService.getUsers().find((u) => u.role === 'super_admin') || currentUser;
+  const [adminName, setAdminName] = useState(currentAdminUser.name || 'Bambang Haryadi, S.Kom.');
+  const [adminUsername, setAdminUsername] = useState(currentAdminUser.username || 'bambangharyadi');
+  const [adminPassword, setAdminPassword] = useState('');
+  const [adminPasswordConfirm, setAdminPasswordConfirm] = useState('');
+  const [adminPhone, setAdminPhone] = useState(profile.adminWhatsapp || currentAdminUser.phone || '081299887711');
+  const [showAdminPassword, setShowAdminPassword] = useState(false);
+  const [adminAccountNotice, setAdminAccountNotice] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
 
   // Dual Logo upload state: Logo 1 (Kiri - Dinas/Yayasan) & Logo 2 (Kanan - Sekolah)
   const [logoPreview, setLogoPreview] = useState<string>(profile.logoUrl);
@@ -111,6 +125,47 @@ export const SchoolSettingsView: React.FC = () => {
     setTimeout(() => setMysqlSavedStatus(null), 4000);
   };
 
+  const handleDownloadPythonServer = () => {
+    fetch('/server.py')
+      .then((res) => {
+        if (!res.ok) throw new Error('File not found');
+        return res.text();
+      })
+      .then((text) => {
+        const blob = new Blob([text], { type: 'text/x-python;charset=utf-8;' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = 'server.py';
+        a.click();
+        URL.revokeObjectURL(url);
+        setMysqlSavedStatus('Berkas server Python (FastAPI + PyMySQL) berhasil diunduh.');
+        setTimeout(() => setMysqlSavedStatus(null), 4000);
+      })
+      .catch(() => {
+        const defaultPython = `"""
+SchoolSphere Enterprise - Python REST API Backend
+Framework: FastAPI + SQLAlchemy + PyMySQL
+"""
+from fastapi import FastAPI
+app = FastAPI(title="SchoolSphere Enterprise API")
+
+@app.get("/api/health")
+def health():
+    return {"status": "ok", "service": "Python FastAPI", "database": "MySQL 8.0+"}
+`;
+        const blob = new Blob([defaultPython], { type: 'text/x-python;charset=utf-8;' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = 'server.py';
+        a.click();
+        URL.revokeObjectURL(url);
+        setMysqlSavedStatus('Berkas server Python (FastAPI) berhasil diunduh.');
+        setTimeout(() => setMysqlSavedStatus(null), 4000);
+      });
+  };
+
   const handleSaveMySQLConfig = (e: React.FormEvent) => {
     e.preventDefault();
     DataService.saveMySQLConfig(mysqlConfig, {
@@ -134,6 +189,46 @@ export const SchoolSettingsView: React.FC = () => {
     setSaveSuccess(true);
     setAuditLogs(DataService.getAuditLogs());
     setTimeout(() => setSaveSuccess(false), 3500);
+  };
+
+  const handleSaveAdminAccount = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!adminName.trim() || !adminUsername.trim()) {
+      setAdminAccountNotice({ type: 'error', message: 'Nama lengkap dan username Super Admin wajib diisi.' });
+      return;
+    }
+
+    if (adminPassword && adminPassword !== adminPasswordConfirm) {
+      setAdminAccountNotice({ type: 'error', message: 'Konfirmasi password baru tidak cocok dengan password yang diketikkan.' });
+      return;
+    }
+
+    const res = DataService.updateSuperAdminCredentials(
+      {
+        name: adminName,
+        username: adminUsername,
+        password: adminPassword || undefined,
+        whatsapp: adminPhone,
+        phone: adminPhone,
+      },
+      { id: currentUser.id, name: currentUser.name, role: currentUser.role }
+    );
+
+    if (res.success) {
+      setProfile(DataService.getSchoolProfile());
+      if (res.updatedUser && currentUser.role === 'super_admin') {
+        updateCurrentUser(res.updatedUser);
+      }
+      setAdminPassword('');
+      setAdminPasswordConfirm('');
+      setAdminAccountNotice({
+        type: 'success',
+        message: `${res.message} Akun telah diperbarui untuk mengantisipasi pergantian admin sekolah.`,
+      });
+      setTimeout(() => setAdminAccountNotice(null), 6000);
+    } else {
+      setAdminAccountNotice({ type: 'error', message: res.message });
+    }
   };
 
   const handleSwitchAcademicYear = (id: string) => {
@@ -247,6 +342,17 @@ export const SchoolSettingsView: React.FC = () => {
           }`}
         >
           Profil & Data Pokok
+        </button>
+        <button
+          onClick={() => setActiveTab('admin_account')}
+          className={`pb-2.5 px-3 transition-colors whitespace-nowrap cursor-pointer flex items-center gap-1.5 ${
+            activeTab === 'admin_account'
+              ? 'border-b-2 border-indigo-600 text-indigo-600 dark:text-indigo-400 font-bold'
+              : 'text-slate-500 hover:text-slate-700'
+          }`}
+        >
+          <ShieldCheck className="w-3.5 h-3.5 text-indigo-600" />
+          <span>Akun Super Admin & Kontak WA</span>
         </button>
         <button
           onClick={() => setActiveTab('kop_surat')}
@@ -558,10 +664,10 @@ export const SchoolSettingsView: React.FC = () => {
             </div>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-3 pt-2">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3 pt-2">
             <div>
               <label className="block text-slate-600 dark:text-slate-400 font-semibold mb-1">
-                Nomor Telepon
+                Nomor Telepon Kantor
               </label>
               <input
                 type="text"
@@ -569,6 +675,21 @@ export const SchoolSettingsView: React.FC = () => {
                 onChange={(e) => handleProfileChange('phone', e.target.value)}
                 className="w-full px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white font-mono"
               />
+            </div>
+            <div>
+              <label className="block text-indigo-700 dark:text-indigo-400 font-bold mb-1 flex items-center gap-1">
+                <span>No. Ponsel / WhatsApp Super Admin</span>
+              </label>
+              <input
+                type="text"
+                value={profile.adminWhatsapp || ''}
+                placeholder="Contoh: 081299887711"
+                onChange={(e) => handleProfileChange('adminWhatsapp', e.target.value)}
+                className="w-full px-3 py-2 rounded-lg border border-indigo-300 dark:border-indigo-700 bg-indigo-50/50 dark:bg-indigo-950/40 text-slate-900 dark:text-white font-mono font-bold"
+              />
+              <span className="text-[10px] text-slate-500 mt-0.5 block">
+                Tujuan pesan WhatsApp saat user klik Lupa Password.
+              </span>
             </div>
             <div>
               <label className="block text-slate-600 dark:text-slate-400 font-semibold mb-1">
@@ -604,6 +725,171 @@ export const SchoolSettingsView: React.FC = () => {
             </button>
           </div>
         </form>
+      )}
+
+      {/* TAB KHUSUS: AKUN SUPER ADMIN & KONTAK WHATSAPP (ANTISIPASI PERGANTIAN ADMIN) */}
+      {activeTab === 'admin_account' && (
+        <div className="space-y-6">
+          {adminAccountNotice && (
+            <div
+              className={`p-4 rounded-xl border text-xs flex items-center gap-2 ${
+                adminAccountNotice.type === 'success'
+                  ? 'bg-emerald-50 dark:bg-emerald-950/60 border-emerald-200 dark:border-emerald-800 text-emerald-800 dark:text-emerald-200'
+                  : 'bg-rose-50 dark:bg-rose-950/60 border-rose-200 dark:border-rose-800 text-rose-800 dark:text-rose-200'
+              }`}
+            >
+              {adminAccountNotice.type === 'success' ? (
+                <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+              ) : (
+                <KeyRound className="w-4 h-4 text-rose-600 shrink-0" />
+              )}
+              <span>{adminAccountNotice.message}</span>
+            </div>
+          )}
+
+          {/* Current Admin Overview Card */}
+          <div className="p-5 rounded-2xl bg-gradient-to-r from-indigo-900 via-indigo-950 to-slate-900 text-white border border-indigo-800/60 shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-4">
+            <div>
+              <div className="flex items-center gap-2 mb-1.5">
+                <span className="px-2.5 py-0.5 rounded text-[10px] font-bold bg-indigo-500/30 text-indigo-200 border border-indigo-400/30">
+                  AKUN ROOT ADMINISTRATOR
+                </span>
+                <span className="text-xs text-emerald-400 font-mono flex items-center gap-1">
+                  ● Status Aktif
+                </span>
+              </div>
+              <h3 className="text-lg font-bold">{adminName}</h3>
+              <p className="text-xs text-indigo-200 mt-0.5">
+                Username Login: <span className="font-mono font-bold text-white">@{adminUsername}</span> · Nomor WhatsApp: <span className="font-mono font-bold text-white">{adminPhone || 'Belum diatur'}</span>
+              </p>
+            </div>
+            <div className="p-3 bg-white/10 rounded-xl border border-white/10 text-[11px] text-indigo-100 max-w-xs leading-relaxed">
+              Formulir di bawah digunakan ketika terjadi pergantian petugas Super Admin atau perubahan nomor WhatsApp resmi sekolah.
+            </div>
+          </div>
+
+          <form onSubmit={handleSaveAdminAccount} className="p-6 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 space-y-5 text-xs shadow-2xs">
+            <div className="flex items-center gap-2 pb-3 border-b border-slate-100 dark:border-slate-800">
+              <ShieldCheck className="w-5 h-5 text-indigo-600" />
+              <div>
+                <h3 className="font-bold text-sm text-slate-900 dark:text-white">
+                  Formulir Pembaruan Akun Super Admin & Nomor WhatsApp
+                </h3>
+                <p className="text-[11px] text-slate-500">
+                  Perubahan username, kata sandi, dan nomor WhatsApp akan langsung disinkronkan ke halaman Login & Lupa Password.
+                </p>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <label className="block text-slate-700 dark:text-slate-300 font-semibold mb-1">
+                  Nama Lengkap Administrator Baru / Aktif
+                </label>
+                <input
+                  type="text"
+                  required
+                  value={adminName}
+                  onChange={(e) => setAdminName(e.target.value)}
+                  placeholder="Contoh: Bambang Haryadi, S.Kom."
+                  className="w-full px-3 py-2.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white font-bold"
+                />
+                <span className="text-[10px] text-slate-400 mt-1 block">
+                  Nama lengkap pejabat admin yang akan tampil pada log audit sistem.
+                </span>
+              </div>
+
+              <div>
+                <label className="block text-slate-700 dark:text-slate-300 font-semibold mb-1">
+                  Username Login Super Admin
+                </label>
+                <div className="relative">
+                  <span className="absolute left-3 top-2.5 text-slate-400 font-mono font-bold">@</span>
+                  <input
+                    type="text"
+                    required
+                    value={adminUsername}
+                    onChange={(e) => setAdminUsername(e.target.value.toLowerCase().replace(/[^a-z0-9]/g, ''))}
+                    placeholder="bambangharyadi"
+                    className="w-full pl-7 pr-3 py-2.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white font-mono font-bold"
+                  />
+                </div>
+                <span className="text-[10px] text-slate-400 mt-1 block">
+                  Huruf kecil tanpa spasi dan simbol. Digunakan saat masuk ke aplikasi.
+                </span>
+              </div>
+            </div>
+
+            <div className="p-4 rounded-xl bg-indigo-50/60 dark:bg-indigo-950/30 border border-indigo-200 dark:border-indigo-800/60 space-y-2">
+              <label className="block text-indigo-950 dark:text-indigo-200 font-bold mb-1 flex items-center gap-1.5">
+                <MessageCircle className="w-4 h-4 text-emerald-600" />
+                <span>Nomor Ponsel / WhatsApp Super Admin (Tujuan Pesan Lupa Password)</span>
+              </label>
+              <input
+                type="text"
+                required
+                value={adminPhone}
+                onChange={(e) => setAdminPhone(e.target.value)}
+                placeholder="Contoh: 081299887711 atau 6281299887711"
+                className="w-full px-3 py-2.5 rounded-lg border border-indigo-300 dark:border-indigo-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white font-mono font-bold text-sm"
+              />
+              <p className="text-[11px] text-indigo-800 dark:text-indigo-300 leading-relaxed">
+                Nomor ini akan otomatis menjadi tujuan pengiriman pesan WhatsApp ketika siswa, guru, atau orang tua menekan tombol <strong>&quot;Lupa Password&quot;</strong> pada halaman masuk. Pastikan nomor WhatsApp selalu aktif dan dapat dihubungi.
+              </p>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-2 border-t border-slate-100 dark:border-slate-800">
+              <div>
+                <div className="flex items-center justify-between mb-1">
+                  <label className="text-slate-700 dark:text-slate-300 font-semibold">
+                    Password Baru (Kosongkan jika tidak diubah)
+                  </label>
+                  <button
+                    type="button"
+                    onClick={() => setShowAdminPassword(!showAdminPassword)}
+                    className="text-[11px] text-indigo-600 dark:text-indigo-400 hover:underline flex items-center gap-1 cursor-pointer"
+                  >
+                    {showAdminPassword ? <EyeOff className="w-3 h-3" /> : <Eye className="w-3 h-3" />}
+                    <span>{showAdminPassword ? 'Sembunyikan' : 'Lihat'}</span>
+                  </button>
+                </div>
+                <input
+                  type={showAdminPassword ? 'text' : 'password'}
+                  value={adminPassword}
+                  onChange={(e) => setAdminPassword(e.target.value)}
+                  placeholder="Ketik password baru jika ingin mengganti..."
+                  className="w-full px-3 py-2.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white font-mono"
+                />
+              </div>
+
+              <div>
+                <label className="block text-slate-700 dark:text-slate-300 font-semibold mb-1">
+                  Konfirmasi Password Baru
+                </label>
+                <input
+                  type={showAdminPassword ? 'text' : 'password'}
+                  value={adminPasswordConfirm}
+                  onChange={(e) => setAdminPasswordConfirm(e.target.value)}
+                  placeholder="Ketik ulang password baru..."
+                  className="w-full px-3 py-2.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white font-mono"
+                />
+              </div>
+            </div>
+
+            <div className="flex items-center justify-between pt-4 border-t border-slate-100 dark:border-slate-800">
+              <span className="text-[11px] text-slate-400">
+                Tindakan ini dicatat dalam log audit sistem untuk integritas keamanan.
+              </span>
+              <button
+                type="submit"
+                className="flex items-center gap-2 px-5 py-2.5 text-xs font-bold rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white cursor-pointer shadow-sm transition-colors"
+              >
+                <Save className="w-4 h-4" />
+                <span>Simpan Kredensial Super Admin</span>
+              </button>
+            </div>
+          </form>
+        </div>
       )}
 
       {/* TAB 2: KOP SURAT & UPLOAD LOGO SEKOLAH */}
@@ -1040,6 +1326,15 @@ export const SchoolSettingsView: React.FC = () => {
                 <Download className="w-4 h-4" />
                 <span>Unduh Skrip Skema & Data Lengkap MySQL (.sql)</span>
               </button>
+
+              <button
+                type="button"
+                onClick={handleDownloadPythonServer}
+                className="flex items-center gap-2 px-4 py-2.5 rounded-lg bg-blue-500 hover:bg-blue-600 text-white font-bold text-xs shadow-md transition-all cursor-pointer"
+              >
+                <Download className="w-4 h-4" />
+                <span>Unduh Server Python (FastAPI + PyMySQL) (.py)</span>
+              </button>
             </div>
           </div>
 
@@ -1186,6 +1481,72 @@ export const SchoolSettingsView: React.FC = () => {
               <div className="p-3 rounded-lg border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-800/40 space-y-1">
                 <span className="font-bold font-mono text-indigo-600 dark:text-indigo-400">parent & teacher messages</span>
                 <p className="text-[11px] text-slate-500">Komunikasi resmi personal / broadcast ke orang tua dan siswa.</p>
+              </div>
+            </div>
+          </div>
+
+          {/* Python Web Architecture & Integration Card */}
+          <div className="p-6 rounded-xl bg-slate-900 text-white border border-slate-800 space-y-4 text-xs">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-3 border-b border-slate-800">
+              <div className="flex items-center gap-2">
+                <div className="w-8 h-8 rounded-lg bg-blue-600/30 text-blue-400 flex items-center justify-center font-mono font-bold">
+                  Py
+                </div>
+                <div>
+                  <h4 className="font-bold text-sm text-white">
+                    Arsitektur Web Berbasis Python (FastAPI + SQLAlchemy + PyMySQL)
+                  </h4>
+                  <p className="text-[11px] text-slate-400">
+                    Mendukung skalabilitas jangka panjang, migrasi dari Spreadsheet menjadi MySQL RDBMS, dan koneksi API modern.
+                  </p>
+                </div>
+              </div>
+              <span className="px-2.5 py-1 rounded bg-blue-900/60 text-blue-300 font-mono text-[11px] font-bold">
+                Python 3.10+ / FastAPI Ready
+              </span>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <span className="font-bold text-slate-300 block text-[11px] uppercase tracking-wider">
+                  Endpoint REST API yang Didukung:
+                </span>
+                <ul className="space-y-1 font-mono text-[11px] text-slate-300">
+                  <li className="p-1.5 rounded bg-slate-800/80 flex items-center justify-between">
+                    <span>GET /api/health</span>
+                    <span className="text-emerald-400">Status MySQL & Service</span>
+                  </li>
+                  <li className="p-1.5 rounded bg-slate-800/80 flex items-center justify-between">
+                    <span>GET/POST /api/students</span>
+                    <span className="text-blue-300">CRUD Peserta Didik</span>
+                  </li>
+                  <li className="p-1.5 rounded bg-slate-800/80 flex items-center justify-between">
+                    <span>GET/POST /api/teachers</span>
+                    <span className="text-blue-300">Guru & Jabatan PTK</span>
+                  </li>
+                  <li className="p-1.5 rounded bg-slate-800/80 flex items-center justify-between">
+                    <span>POST /api/schedule/generate-anti-conflict</span>
+                    <span className="text-amber-300">Jadwal Bebas Bentrok</span>
+                  </li>
+                  <li className="p-1.5 rounded bg-slate-800/80 flex items-center justify-between">
+                    <span>PUT/DELETE /api/submissions/:id/grade</span>
+                    <span className="text-indigo-300">Edit/Hapus Nilai Tugas</span>
+                  </li>
+                </ul>
+              </div>
+
+              <div className="space-y-2">
+                <span className="font-bold text-slate-300 block text-[11px] uppercase tracking-wider">
+                  Langkah Menjalankan Service Python:
+                </span>
+                <div className="p-3 rounded-lg bg-black/60 font-mono text-[11px] text-emerald-400 space-y-1.5 border border-slate-800">
+                  <p className="text-slate-400"># 1. Pasang dependensi Python & MySQL driver</p>
+                  <p className="text-white">pip install -r requirements.txt</p>
+                  <p className="text-slate-400 pt-1"># 2. Jalankan server backend FastAPI</p>
+                  <p className="text-white">python -m uvicorn server:app --host 0.0.0.0 --port 8000 --reload</p>
+                  <p className="text-slate-400 pt-1"># 3. Dokumentasi interaktif Swagger UI</p>
+                  <p className="text-cyan-300">http://localhost:8000/docs</p>
+                </div>
               </div>
             </div>
           </div>

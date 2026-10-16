@@ -1,7 +1,7 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { DataService } from '../services/dataService';
-import { ScheduleItem, ScheduleBlockConfig } from '../types';
+import { ScheduleItem, ScheduleBlockConfig, LessonPeriodConfig } from '../types';
 import { PrintModal } from '../components/common/PrintModal';
 import {
   Calendar,
@@ -10,6 +10,7 @@ import {
   Filter,
   CheckCircle2,
   AlertCircle,
+  AlertTriangle,
   Building,
   Zap,
   ShieldCheck,
@@ -19,7 +20,30 @@ import {
   Plus,
   Trash2,
   Sliders,
+  Lightbulb,
+  Check,
+  HelpCircle,
+  Users,
 } from 'lucide-react';
+
+export interface ConflictDetail {
+  id: string;
+  itemId: string;
+  day: string;
+  period: number;
+  timeRange: string;
+  subjectName: string;
+  teacherName: string;
+  className: string;
+  classId: string;
+  room: string;
+  conflictType: 'teacher' | 'room' | 'both';
+  otherClasses: string[];
+  otherSubjects: string[];
+  otherTeachers: string[];
+  reasons: string[];
+  solutions: string[];
+}
 
 export const ScheduleView: React.FC = () => {
   const { currentUser } = useAuth();
@@ -38,12 +62,20 @@ export const ScheduleView: React.FC = () => {
   const [generatorSuccessMsg, setGeneratorSuccessMsg] = useState<string | null>(null);
   const [isGenerating, setIsGenerating] = useState(false);
 
+  // JP Duration & Lesson Period Config State (Super Admin & Wakasek Kurikulum)
+  const [jpConfigModalOpen, setJpConfigModalOpen] = useState(false);
+  const [jpConfig, setJpConfig] = useState<LessonPeriodConfig>(() => DataService.getLessonPeriodConfig());
+
   // Block Manager Modal State
   const [blockModalOpen, setBlockModalOpen] = useState(false);
   const [newBlockDay, setNewBlockDay] = useState<'Senin' | 'Selasa' | 'Rabu' | 'Kamis' | 'Jumat'>('Senin');
   const [newBlockPeriod, setNewBlockPeriod] = useState<number>(1);
   const [newBlockTimeRange, setNewBlockTimeRange] = useState('07:30 - 08:00');
   const [newBlockTitle, setNewBlockTitle] = useState('Upacara Bendera');
+
+  // Conflict Details Modal States
+  const [selectedConflict, setSelectedConflict] = useState<ConflictDetail | null>(null);
+  const [showAllConflictsModal, setShowAllConflictsModal] = useState(false);
 
   const days = ['Senin', 'Selasa', 'Rabu', 'Kamis', 'Jumat'] as const;
 
@@ -53,34 +85,108 @@ export const ScheduleView: React.FC = () => {
   // Permission: Super Admin, Wakasek Kurikulum, and Operator
   const canManageSchedule = ['super_admin', 'wakasek_kurikulum', 'operator'].includes(currentUser.role);
 
-  // Check conflicts in current schedule
-  const conflictReport = React.useMemo(() => {
-    let teacherCollisions = 0;
-    let roomCollisions = 0;
-    const teacherSlotMap: Record<string, string[]> = {};
-    const roomSlotMap: Record<string, string[]> = {};
+  // Comprehensive Conflict Detection & Detailed Reason/Solution Generator
+  const { conflictMap, allConflictsList, totalConflicts } = useMemo(() => {
+    const map: Record<string, ConflictDetail> = {};
+    const conflictList: ConflictDetail[] = [];
 
+    // Map by slot
     schedule.forEach((item) => {
-      if (item.isBlocked) return; // skip blocked routine activities
+      if (item.isBlocked) return;
 
-      const tKey = `${item.day}-${item.period}-${item.teacherId}`;
-      if (!teacherSlotMap[tKey]) teacherSlotMap[tKey] = [];
-      teacherSlotMap[tKey].push(item.className);
-      if (teacherSlotMap[tKey].length > 1) teacherCollisions++;
+      const clashingItems = schedule.filter(
+        (other) =>
+          other.id !== item.id &&
+          !other.isBlocked &&
+          other.day === item.day &&
+          other.period === item.period &&
+          (other.teacherId === item.teacherId || other.room === item.room)
+      );
 
-      const rKey = `${item.day}-${item.period}-${item.room}`;
-      if (!roomSlotMap[rKey]) roomSlotMap[rKey] = [];
-      roomSlotMap[rKey].push(item.className);
-      if (roomSlotMap[rKey].length > 1) roomCollisions++;
+      if (clashingItems.length > 0) {
+        const teacherClash = clashingItems.some((o) => o.teacherId === item.teacherId);
+        const roomClash = clashingItems.some((o) => o.room === item.room);
+        const conflictType: 'teacher' | 'room' | 'both' =
+          teacherClash && roomClash ? 'both' : teacherClash ? 'teacher' : 'room';
+
+        const otherClasses = Array.from(new Set(clashingItems.map((o) => o.className)));
+        const otherSubjects = Array.from(new Set(clashingItems.map((o) => o.subjectName)));
+        const otherTeachers = Array.from(new Set(clashingItems.map((o) => o.teacherName)));
+
+        const reasons: string[] = [];
+        if (teacherClash) {
+          reasons.push(
+            `Guru ${item.teacherName} terjadwal mengajar di ${item.className} (${item.subjectName}) dan secara bersamaan di ${otherClasses.join(', ')} (${otherSubjects.join(', ')}) pada hari ${item.day} Jam ke-${item.period} (${item.timeRange}). Fisik guru tidak dapat berada di dua ruang kelas berbeda dalam jam yang sama.`
+          );
+        }
+        if (roomClash) {
+          reasons.push(
+            `Ruang belajar "${item.room}" dialokasikan ganda untuk rombel ${item.className} dan ${otherClasses.join(', ')} pada waktu yang bersamaan. Ini mengakibatkan tumpang tindih sarana ruang kelas.`
+          );
+        }
+
+        const solutions: string[] = [
+          `Pembagian Rombel Paralel: Jika mata pelajaran diajar oleh 2 guru (misal Pak Rustan di X MIPA 1-2, dan Bu Rini di X IPS 1-2), pastikan penugasan rombel pada menu Tenaga Pendidik sudah sesuai sehingga jadwal tidak tumpang tindih.`,
+          `Pertukaran Jam Mengajar (Slot Swap): Tukar jam ke-${item.period} kelas ${item.className} dengan jam kosong atau mapel guru lain di hari ${item.day}.`,
+          `Relokasi Ruang Kelas: Pindahkan salah satu rombel ke laboratorium, perpustakaan, atau ruang multimedia cadangan.`,
+          `Generate Anti-Bentrok Otomatis: Klik tombol "Eksekusi Generate Anti-Bentrok" agar sistem secara otomatis menata ulang jadwal bebas bentrok dengan memperhitungkan rombel yang diampu setiap guru.`
+        ];
+
+        const detail: ConflictDetail = {
+          id: `conf-${item.id}`,
+          itemId: item.id,
+          day: item.day,
+          period: item.period,
+          timeRange: item.timeRange,
+          subjectName: item.subjectName,
+          teacherName: item.teacherName,
+          className: item.className,
+          classId: item.classId,
+          room: item.room,
+          conflictType,
+          otherClasses,
+          otherSubjects,
+          otherTeachers,
+          reasons,
+          solutions,
+        };
+
+        map[item.id] = detail;
+        conflictList.push(detail);
+      }
     });
 
     return {
-      teacherCollisions,
-      roomCollisions,
-      totalSessions: schedule.length,
-      isClean: teacherCollisions === 0 && roomCollisions === 0,
+      conflictMap: map,
+      allConflictsList: conflictList,
+      totalConflicts: Math.ceil(conflictList.length / 2),
     };
   }, [schedule]);
+
+  // Handle Simulate Conflict for Demo / Testing Purposes
+  const handleSimulateConflict = () => {
+    // Intentionally create a conflict between first 2 non-blocked items
+    const nonBlocked = schedule.filter((s) => !s.isBlocked);
+    if (nonBlocked.length >= 2) {
+      const item1 = nonBlocked[0];
+      const item2 = nonBlocked.find((s) => s.classId !== item1.classId && !s.isBlocked) || nonBlocked[1];
+      const updated = schedule.map((s) => {
+        if (s.id === item2.id) {
+          return {
+            ...s,
+            day: item1.day,
+            period: item1.period,
+            timeRange: item1.timeRange,
+            teacherId: item1.teacherId,
+            teacherName: item1.teacherName,
+          };
+        }
+        return s;
+      });
+      setSchedule(updated);
+      setSelectedClassId(item1.classId);
+    }
+  };
 
   const handleAddBlock = (e: React.FormEvent) => {
     e.preventDefault();
@@ -124,6 +230,27 @@ export const ScheduleView: React.FC = () => {
     setBlocks(DataService.getScheduleBlocks());
   };
 
+  const handleAutoResolveConflict = () => {
+    setIsGenerating(true);
+    setTimeout(() => {
+      const res = DataService.resolveScheduleConflicts({
+        id: currentUser.id,
+        name: currentUser.name,
+        role: currentUser.role,
+      });
+
+      setSchedule(DataService.getSchedule());
+      setIsGenerating(false);
+      setSelectedConflict(null);
+      setShowAllConflictsModal(false);
+      setGeneratorModalOpen(false);
+      setGeneratorSuccessMsg(res.message);
+      setTimeout(() => {
+        setGeneratorSuccessMsg(null);
+      }, 4000);
+    }, 400);
+  };
+
   const handleExecuteGenerate = () => {
     setIsGenerating(true);
     setTimeout(() => {
@@ -136,11 +263,28 @@ export const ScheduleView: React.FC = () => {
       setSchedule(DataService.getSchedule());
       setIsGenerating(false);
       setGeneratorSuccessMsg(res.message);
+      setSelectedConflict(null);
+      setShowAllConflictsModal(false);
       setTimeout(() => {
         setGeneratorModalOpen(false);
         setGeneratorSuccessMsg(null);
-      }, 2000);
+      }, 3000);
     }, 600);
+  };
+
+  const handleSaveJpConfig = (e: React.FormEvent) => {
+    e.preventDefault();
+    DataService.saveLessonPeriodConfig(jpConfig, {
+      id: currentUser.id,
+      name: currentUser.name,
+      role: currentUser.role,
+    });
+    setSchedule(DataService.getSchedule());
+    setJpConfigModalOpen(false);
+    setGeneratorSuccessMsg(
+      `Pengaturan Jam Pelajaran berhasil disimpan! Durasi 1 JP = ${jpConfig.jpDurationMinutes} menit, KBM mulai ${jpConfig.startTime}, alokasi ${jpConfig.defaultJpPerMeeting} JP/pertemuan.`
+    );
+    setTimeout(() => setGeneratorSuccessMsg(null), 4000);
   };
 
   return (
@@ -152,13 +296,23 @@ export const ScheduleView: React.FC = () => {
             Jadwal Pelajaran & Kalender Pembelajaran
           </h2>
           <p className="text-xs text-slate-500">
-            Penyusunan jadwal otomatis bebas bentrok, pengaturan blok kegiatan rutin (Upacara & Ibadah), dan pengesahan resmi Wakasek Kurikulum.
+            Penyusunan jadwal otomatis bebas bentrok, penandaan khusus jadwal bermasalah dengan fitur Alasan & Solusi, blok kegiatan rutin, dan pengesahan resmi Wakasek Kurikulum.
           </p>
         </div>
 
         <div className="flex flex-wrap items-center gap-2">
           {canManageSchedule && (
             <>
+              {/* Tombol Atur JP & Durasi KBM */}
+              <button
+                onClick={() => setJpConfigModalOpen(true)}
+                className="flex items-center gap-1.5 px-3 py-2 text-xs font-semibold rounded-lg border border-indigo-200 dark:border-indigo-800 bg-indigo-50/70 dark:bg-indigo-950/40 text-indigo-700 dark:text-indigo-300 hover:bg-indigo-100 transition-colors cursor-pointer"
+                title="Kelola durasi tiap JP (misal: 1 JP = 45 menit, 2 JP/pertemuan) dan jam mulai KBM"
+              >
+                <Clock className="w-3.5 h-3.5 text-indigo-600" />
+                <span>Atur JP & Durasi ({jpConfig.jpDurationMinutes}m/JP)</span>
+              </button>
+
               <button
                 onClick={() => setBlockModalOpen(true)}
                 className="flex items-center gap-1.5 px-3 py-2 text-xs font-semibold rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 hover:bg-slate-50 transition-colors cursor-pointer"
@@ -188,28 +342,91 @@ export const ScheduleView: React.FC = () => {
         </div>
       </div>
 
+      {/* Global Success / Conflict Resolved Toast Banner */}
+      {generatorSuccessMsg && (
+        <div className="p-3.5 bg-emerald-50 dark:bg-emerald-950/70 border border-emerald-300 dark:border-emerald-800 text-emerald-900 dark:text-emerald-200 text-xs rounded-xl flex items-center justify-between shadow-xs animate-in fade-in duration-200">
+          <div className="flex items-center gap-2">
+            <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+            <span className="font-semibold">{generatorSuccessMsg}</span>
+          </div>
+          <button
+            onClick={() => setGeneratorSuccessMsg(null)}
+            className="text-emerald-700 hover:text-emerald-900 dark:text-emerald-400 font-bold text-xs cursor-pointer ml-3"
+          >
+            ✕
+          </button>
+        </div>
+      )}
+
       {/* Conflict Status Badge Banner */}
-      <div className="p-3.5 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs">
+      <div
+        className={`p-3.5 rounded-xl border flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs transition-colors ${
+          totalConflicts === 0
+            ? 'bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800'
+            : 'bg-rose-50 dark:bg-rose-950/40 border-rose-300 dark:border-rose-800 text-rose-900 dark:text-rose-200'
+        }`}
+      >
         <div className="flex items-center gap-2.5">
-          <ShieldCheck className="w-4 h-4 text-emerald-600 shrink-0" />
+          {totalConflicts === 0 ? (
+            <ShieldCheck className="w-4 h-4 text-emerald-600 shrink-0" />
+          ) : (
+            <AlertTriangle className="w-4 h-4 text-rose-600 animate-bounce shrink-0" />
+          )}
           <div>
             <span className="font-bold text-slate-800 dark:text-slate-200">
               Validasi Jadwal Pembelajaran:
             </span>
-            <span className="ml-2 text-emerald-600 dark:text-emerald-400 font-semibold">
-              {conflictReport.isClean ? '0 Bentrok Terdeteksi (Optimal & Sinkron Rombel-PTK)' : `${conflictReport.teacherCollisions} Bentrok Terdeteksi`}
+            <span
+              className={`ml-2 font-semibold ${
+                totalConflicts === 0
+                  ? 'text-emerald-600 dark:text-emerald-400'
+                  : 'text-rose-600 dark:text-rose-400 font-bold'
+              }`}
+            >
+              {totalConflicts === 0
+                ? '0 Bentrok Terdeteksi (Optimal & Sinkron Rombel-PTK)'
+                : `${totalConflicts} Titik Bentrok Jadwal Terdeteksi!`}
             </span>
           </div>
         </div>
 
-        <div className="flex items-center gap-3 font-mono text-[11px] text-slate-500">
-          <span>{classes.length} Rombel</span>
-          <span>·</span>
-          <span>{teachers.length} Guru</span>
-          <span>·</span>
-          <span>{blocks.filter((b) => b.isActive).length} Blok Terkunci</span>
-          <span>·</span>
-          <span>{schedule.length} Sesi Aktif</span>
+        <div className="flex items-center gap-2 font-mono text-[11px]">
+          {totalConflicts > 0 ? (
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => setShowAllConflictsModal(true)}
+                className="px-2.5 py-1 rounded-md bg-rose-600 text-white font-bold hover:bg-rose-700 cursor-pointer shadow-xs"
+              >
+                Lihat Ringkasan Bentrok ({allConflictsList.length})
+              </button>
+              {canManageSchedule && (
+                <button
+                  onClick={handleAutoResolveConflict}
+                  className="px-2.5 py-1 rounded-md bg-emerald-600 text-white font-bold hover:bg-emerald-700 cursor-pointer shadow-xs flex items-center gap-1"
+                >
+                  <Sparkles className="w-3 h-3" />
+                  <span>Selesaikan Bentrok Otomatis</span>
+                </button>
+              )}
+            </div>
+          ) : (
+            <div className="flex items-center gap-2 text-slate-500">
+              <span>{classes.length} Rombel</span>
+              <span>·</span>
+              <span>{teachers.length} Guru</span>
+              <span>·</span>
+              <span>{blocks.filter((b) => b.isActive).length} Blok Terkunci</span>
+              {canManageSchedule && (
+                <button
+                  onClick={handleSimulateConflict}
+                  className="ml-2 text-[10px] text-slate-500 underline hover:text-indigo-600 cursor-pointer"
+                  title="Simulasikan bentrok untuk menguji indikator, alasan, dan solusi"
+                >
+                  [Simulasi Uji Bentrok]
+                </button>
+              )}
+            </div>
+          )}
         </div>
       </div>
 
@@ -261,6 +478,8 @@ export const ScheduleView: React.FC = () => {
                   </p>
                 ) : (
                   dayItems.map((item) => {
+                    const conflict = conflictMap[item.id];
+
                     if (item.isBlocked) {
                       return (
                         <div
@@ -282,6 +501,44 @@ export const ScheduleView: React.FC = () => {
                       );
                     }
 
+                    // Conflicting Item: Tanda Khusus Bentrok & Tombol Alasan dan Solusi
+                    if (conflict) {
+                      return (
+                        <div
+                          key={item.id}
+                          className="p-2.5 rounded-lg border-2 border-rose-500 bg-rose-50/90 dark:bg-rose-950/50 text-xs space-y-1.5 shadow-xs relative"
+                        >
+                          <div className="flex items-center justify-between text-[10px] font-mono">
+                            <span className="font-bold text-rose-800 dark:text-rose-300">Jam Ke-{item.period}</span>
+                            <span className="px-1.5 py-0.5 rounded bg-rose-600 text-white font-bold text-[9px] uppercase tracking-wider animate-pulse flex items-center gap-0.5">
+                              <AlertTriangle className="w-2.5 h-2.5" /> Bentrok
+                            </span>
+                          </div>
+
+                          <p className="font-bold text-rose-950 dark:text-rose-100 line-clamp-1">
+                            {item.subjectName}
+                          </p>
+                          <p className="text-[11px] text-rose-800 dark:text-rose-300 font-medium line-clamp-1">
+                            {item.teacherName}
+                          </p>
+                          <p className="text-[10px] text-rose-700 dark:text-rose-400 font-mono flex items-center gap-1">
+                            <Building className="w-3 h-3" />
+                            {item.room} · Tabrakan dgn: {conflict.otherClasses.join(', ')}
+                          </p>
+
+                          <button
+                            type="button"
+                            onClick={() => setSelectedConflict(conflict)}
+                            className="w-full mt-1.5 py-1 px-2 rounded-md bg-rose-600 hover:bg-rose-700 text-white font-bold text-[10px] flex items-center justify-center gap-1 cursor-pointer shadow-xs transition-colors"
+                          >
+                            <Lightbulb className="w-3 h-3 text-amber-300" />
+                            <span>Lihat Alasan & Solusi</span>
+                          </button>
+                        </div>
+                      );
+                    }
+
+                    // Normal Non-conflicting Item
                     return (
                       <div
                         key={item.id}
@@ -310,6 +567,181 @@ export const ScheduleView: React.FC = () => {
           );
         })}
       </div>
+
+      {/* MODAL: DETAIL ALASAN & SOLUSI JADWAL BENTROK */}
+      {selectedConflict && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
+          <div className="bg-white dark:bg-slate-900 rounded-xl max-w-lg w-full p-6 border-2 border-rose-500 shadow-2xl space-y-4 text-xs">
+            <div className="flex items-center justify-between pb-2 border-b border-rose-100 dark:border-rose-900/50">
+              <div className="flex items-center gap-2">
+                <div className="w-8 h-8 rounded-lg bg-rose-100 dark:bg-rose-950 flex items-center justify-center text-rose-600">
+                  <AlertTriangle className="w-5 h-5 text-rose-600" />
+                </div>
+                <div>
+                  <h3 className="text-sm font-bold text-slate-900 dark:text-white flex items-center gap-1.5">
+                    Detail Jadwal Bentrok & Solusi Pencegahan
+                  </h3>
+                  <p className="text-[11px] text-slate-500 font-mono">
+                    {selectedConflict.day} Jam Ke-{selectedConflict.period} ({selectedConflict.timeRange}) · Kelas {selectedConflict.className}
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={() => setSelectedConflict(null)}
+                className="text-slate-400 hover:text-slate-600 cursor-pointer"
+              >
+                ✕
+              </button>
+            </div>
+
+            {/* Sesi Bermasalah Card */}
+            <div className="p-3 bg-slate-50 dark:bg-slate-800/60 rounded-xl border border-slate-200 dark:border-slate-700 grid grid-cols-2 gap-2 text-[11px]">
+              <div>
+                <span className="text-slate-400 block">Mata Pelajaran:</span>
+                <span className="font-bold text-slate-800 dark:text-slate-200">{selectedConflict.subjectName}</span>
+              </div>
+              <div>
+                <span className="text-slate-400 block">Guru Pengampu:</span>
+                <span className="font-bold text-indigo-600 dark:text-indigo-400">{selectedConflict.teacherName}</span>
+              </div>
+              <div>
+                <span className="text-slate-400 block">Ruangan:</span>
+                <span className="font-bold text-slate-800 dark:text-slate-200">{selectedConflict.room}</span>
+              </div>
+              <div>
+                <span className="text-slate-400 block">Rombel Bertabrakan:</span>
+                <span className="font-bold text-rose-600 dark:text-rose-400">{selectedConflict.otherClasses.join(', ')}</span>
+              </div>
+            </div>
+
+            {/* Bagian 1: ALASAN BENTROK */}
+            <div className="p-3.5 bg-rose-50 dark:bg-rose-950/40 rounded-xl border border-rose-200 dark:border-rose-900 space-y-1.5">
+              <h4 className="font-bold text-rose-900 dark:text-rose-200 text-xs flex items-center gap-1.5">
+                <AlertCircle className="w-4 h-4 text-rose-600 shrink-0" />
+                Alasan Terjadinya Bentrok (Root Cause Analysis):
+              </h4>
+              <ul className="space-y-1.5 text-[11px] text-rose-800 dark:text-rose-300 list-disc list-inside leading-relaxed">
+                {selectedConflict.reasons.map((r, idx) => (
+                  <li key={idx}>{r}</li>
+                ))}
+              </ul>
+            </div>
+
+            {/* Bagian 2: SOLUSI AGAR TIDAK BENTROK */}
+            <div className="p-3.5 bg-emerald-50 dark:bg-emerald-950/40 rounded-xl border border-emerald-200 dark:border-emerald-900 space-y-2">
+              <h4 className="font-bold text-emerald-900 dark:text-emerald-200 text-xs flex items-center gap-1.5">
+                <Lightbulb className="w-4 h-4 text-emerald-600 shrink-0" />
+                Rekomendasi Solusi Agar Bebas Bentrok:
+              </h4>
+              <ul className="space-y-1.5 text-[11px] text-emerald-800 dark:text-emerald-300 list-decimal list-inside leading-relaxed">
+                {selectedConflict.solutions.map((s, idx) => (
+                  <li key={idx}>{s}</li>
+                ))}
+              </ul>
+            </div>
+
+            <div className="flex items-center justify-between pt-2 border-t border-slate-100 dark:border-slate-800">
+              <button
+                type="button"
+                onClick={() => setSelectedConflict(null)}
+                className="px-4 py-2 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 font-medium cursor-pointer"
+              >
+                Tutup
+              </button>
+
+              {canManageSchedule && (
+                <button
+                  type="button"
+                  onClick={handleAutoResolveConflict}
+                  className="flex items-center gap-1.5 px-4 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white font-semibold cursor-pointer shadow-xs"
+                >
+                  <Sparkles className="w-3.5 h-3.5 text-amber-300" />
+                  <span>Selesaikan Bentrok Otomatis</span>
+                </button>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL: DAFTAR SEMUA BENTROK DI SELURUH SEKOLAH */}
+      {showAllConflictsModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
+          <div className="bg-white dark:bg-slate-900 rounded-xl max-w-2xl w-full p-6 border border-slate-200 dark:border-slate-800 shadow-2xl space-y-4 text-xs">
+            <div className="flex items-center justify-between pb-2 border-b border-slate-100 dark:border-slate-800">
+              <div className="flex items-center gap-2">
+                <AlertTriangle className="w-5 h-5 text-rose-600" />
+                <div>
+                  <h3 className="text-sm font-bold text-slate-900 dark:text-white">
+                    Daftar Rekapitulasi Bentrok Jadwal Seluruh Rombel ({allConflictsList.length})
+                  </h3>
+                  <p className="text-[11px] text-slate-500">
+                    Sistem mendeteksi jadwal yang tumpang tindih antar guru dan ruangan.
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={() => setShowAllConflictsModal(false)}
+                className="text-slate-400 hover:text-slate-600"
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="max-h-72 overflow-y-auto space-y-2">
+              {allConflictsList.map((c, i) => (
+                <div
+                  key={i}
+                  className="p-3 rounded-lg border border-rose-200 dark:border-rose-900/60 bg-rose-50/60 dark:bg-rose-950/30 flex items-center justify-between gap-3"
+                >
+                  <div className="space-y-0.5">
+                    <span className="font-bold text-rose-900 dark:text-rose-200">
+                      {c.day} Jam Ke-{c.period} ({c.timeRange})
+                    </span>
+                    <p className="text-[11px] text-slate-700 dark:text-slate-300">
+                      Kelas <strong>{c.className}</strong> ({c.subjectName}) bertabrakan dengan <strong>{c.otherClasses.join(', ')}</strong>
+                    </p>
+                    <p className="text-[10px] text-indigo-600 dark:text-indigo-400">
+                      Guru: {c.teacherName} · Ruang: {c.room}
+                    </p>
+                  </div>
+
+                  <button
+                    onClick={() => {
+                      setShowAllConflictsModal(false);
+                      setSelectedConflict(c);
+                    }}
+                    className="px-2.5 py-1 rounded-md bg-white dark:bg-slate-800 border border-rose-300 text-rose-700 dark:text-rose-300 font-bold text-[10px] hover:bg-rose-100 shrink-0 cursor-pointer"
+                  >
+                    Alasan & Solusi
+                  </button>
+                </div>
+              ))}
+            </div>
+
+            <div className="flex items-center justify-between pt-2 border-t border-slate-100 dark:border-slate-800">
+              <button
+                type="button"
+                onClick={() => setShowAllConflictsModal(false)}
+                className="px-4 py-2 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 font-medium cursor-pointer"
+              >
+                Tutup
+              </button>
+
+              {canManageSchedule && (
+                <button
+                  type="button"
+                  onClick={handleAutoResolveConflict}
+                  className="flex items-center gap-1.5 px-4 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white font-semibold cursor-pointer shadow-xs"
+                >
+                  <Sparkles className="w-3.5 h-3.5 text-amber-300" />
+                  <span>Selesaikan Semua Bentrok Sekaligus</span>
+                </button>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* MODAL: PENGATURAN BLOK JADWAL RUTIN (SEBELUM GENERATE) */}
       {blockModalOpen && (
@@ -551,6 +983,161 @@ export const ScheduleView: React.FC = () => {
         </div>
       )}
 
+      {/* MODAL: PENGATURAN JAM PELAJARAN & DURASI JP (SUPER ADMIN & WAKASEK KURIKULUM) */}
+      {jpConfigModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
+          <div className="bg-white dark:bg-slate-900 rounded-xl max-w-lg w-full p-6 border border-slate-200 dark:border-slate-800 shadow-2xl space-y-4 text-xs">
+            <div className="flex items-center justify-between pb-2 border-b border-slate-100 dark:border-slate-800">
+              <div className="flex items-center gap-2">
+                <div className="w-8 h-8 rounded-lg bg-indigo-100 dark:bg-indigo-950 flex items-center justify-center text-indigo-600">
+                  <Clock className="w-4 h-4 text-indigo-600" />
+                </div>
+                <div>
+                  <h3 className="text-sm font-bold text-slate-900 dark:text-white">
+                    Pengaturan Jam Pelajaran (JP) & Durasi KBM
+                  </h3>
+                  <p className="text-[11px] text-slate-500">
+                    Dikelola oleh Super Admin & Wakasek Kurikulum. Menentukan durasi menit per JP dan jam pertemuan.
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={() => setJpConfigModalOpen(false)}
+                className="text-slate-400 hover:text-slate-600 cursor-pointer text-xs"
+              >
+                ✕
+              </button>
+            </div>
+
+            <form onSubmit={handleSaveJpConfig} className="space-y-3.5">
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-slate-700 dark:text-slate-300 font-semibold mb-1">
+                    Durasi 1 JP (Menit)
+                  </label>
+                  <input
+                    type="number"
+                    min={30}
+                    max={60}
+                    required
+                    value={jpConfig.jpDurationMinutes}
+                    onChange={(e) =>
+                      setJpConfig({ ...jpConfig, jpDurationMinutes: Number(e.target.value) })
+                    }
+                    className="w-full px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white font-mono font-bold"
+                  />
+                  <span className="text-[10px] text-slate-400 mt-0.5 block">
+                    Standar SMA: 45 menit / JP
+                  </span>
+                </div>
+
+                <div>
+                  <label className="block text-slate-700 dark:text-slate-300 font-semibold mb-1">
+                    Jam Mulai KBM (Pagi)
+                  </label>
+                  <input
+                    type="time"
+                    required
+                    value={jpConfig.startTime}
+                    onChange={(e) => setJpConfig({ ...jpConfig, startTime: e.target.value })}
+                    className="w-full px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white font-mono"
+                  />
+                  <span className="text-[10px] text-slate-400 mt-0.5 block">
+                    Waktu mulai sesi Jam Ke-1
+                  </span>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-slate-700 dark:text-slate-300 font-semibold mb-1">
+                    Alokasi JP per Pertemuan
+                  </label>
+                  <select
+                    value={jpConfig.defaultJpPerMeeting}
+                    onChange={(e) =>
+                      setJpConfig({ ...jpConfig, defaultJpPerMeeting: Number(e.target.value) })
+                    }
+                    className="w-full px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white cursor-pointer font-bold"
+                  >
+                    <option value={1}>1 JP / Pertemuan ({jpConfig.jpDurationMinutes} Menit)</option>
+                    <option value={2}>2 JP / Pertemuan ({jpConfig.jpDurationMinutes * 2} Menit)</option>
+                    <option value={3}>3 JP / Pertemuan ({jpConfig.jpDurationMinutes * 3} Menit)</option>
+                    <option value={4}>4 JP / Pertemuan (Praktikum Blok)</option>
+                  </select>
+                  <span className="text-[10px] text-slate-400 mt-0.5 block">
+                    Misal guru menghabiskan 2 JP/sesi
+                  </span>
+                </div>
+
+                <div>
+                  <label className="block text-slate-700 dark:text-slate-300 font-semibold mb-1">
+                    Total Jam Ke- per Hari
+                  </label>
+                  <select
+                    value={jpConfig.totalPeriodsPerDay}
+                    onChange={(e) =>
+                      setJpConfig({ ...jpConfig, totalPeriodsPerDay: Number(e.target.value) })
+                    }
+                    className="w-full px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white cursor-pointer font-bold"
+                  >
+                    <option value={6}>6 JP per Hari</option>
+                    <option value={7}>7 JP per Hari</option>
+                    <option value={8}>8 JP per Hari (Standar)</option>
+                    <option value={9}>9 JP per Hari</option>
+                    <option value={10}>10 JP per Hari</option>
+                  </select>
+                </div>
+              </div>
+
+              {/* Istirahat Settings */}
+              <div className="p-3 bg-slate-50 dark:bg-slate-800/60 rounded-xl border border-slate-200 dark:border-slate-700 space-y-2">
+                <span className="font-bold text-slate-700 dark:text-slate-300 block">
+                  Jadwal Waktu Istirahat:
+                </span>
+                <div className="space-y-2">
+                  {jpConfig.breaks.map((brk, idx) => (
+                    <div
+                      key={idx}
+                      className="flex items-center justify-between p-2 rounded-lg bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800"
+                    >
+                      <div>
+                        <span className="font-bold text-slate-800 dark:text-slate-200">
+                          {brk.name}
+                        </span>
+                        <p className="text-[10px] text-slate-400">
+                          Setelah Jam Ke-{brk.afterPeriod}
+                        </p>
+                      </div>
+                      <div className="flex items-center gap-1 font-mono text-xs font-bold text-indigo-600 dark:text-indigo-400">
+                        <span>{brk.durationMinutes} Menit</span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-100 dark:border-slate-800">
+                <button
+                  type="button"
+                  onClick={() => setJpConfigModalOpen(false)}
+                  className="px-4 py-2 rounded-lg text-slate-600 hover:bg-slate-100 font-medium cursor-pointer"
+                >
+                  Batal
+                </button>
+                <button
+                  type="submit"
+                  className="flex items-center gap-1.5 px-4 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white font-semibold cursor-pointer shadow-xs"
+                >
+                  <Clock className="w-3.5 h-3.5" />
+                  <span>Simpan & Terapkan Pengaturan JP</span>
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
       {/* Print Modal Jadwal - Format F4 & Ditandatangani Wakasek Kurikulum */}
       <PrintModal
         isOpen={printModalOpen}
@@ -583,37 +1170,44 @@ export const ScheduleView: React.FC = () => {
 
                 if (dayItems.length === 0) return null;
 
-                return dayItems.map((s, idx) => (
-                  <tr key={s.id} className={s.isBlocked ? 'bg-amber-50/50' : ''}>
-                    {idx === 0 && (
-                      <td
-                        rowSpan={dayItems.length}
-                        className="border border-black py-2 px-2 text-center font-bold align-middle bg-slate-50 text-slate-900"
-                      >
-                        {day}
+                return dayItems.map((s, idx) => {
+                  const conflict = conflictMap[s.id];
+                  return (
+                    <tr key={s.id} className={s.isBlocked ? 'bg-amber-50/50' : conflict ? 'bg-rose-50' : ''}>
+                      {idx === 0 && (
+                        <td
+                          rowSpan={dayItems.length}
+                          className="border border-black py-2 px-2 text-center font-bold align-middle bg-slate-50 text-slate-900"
+                        >
+                          {day}
+                        </td>
+                      )}
+                      <td className="border border-black py-1 px-2 text-center font-mono">{s.period}</td>
+                      <td className="border border-black py-1 px-2 text-center font-mono text-[11px]">{s.timeRange}</td>
+                      <td className="border border-black py-1 px-3 font-semibold">
+                        {s.isBlocked ? (
+                          <span className="text-amber-900 font-bold uppercase tracking-wide">
+                            [BLOK] {s.blockTitle || s.subjectName}
+                          </span>
+                        ) : conflict ? (
+                          <span className="text-rose-700 font-bold">
+                            ⚠️ [BENTROK] {s.subjectName}
+                          </span>
+                        ) : (
+                          s.subjectName
+                        )}
                       </td>
-                    )}
-                    <td className="border border-black py-1 px-2 text-center font-mono">{s.period}</td>
-                    <td className="border border-black py-1 px-2 text-center font-mono text-[11px]">{s.timeRange}</td>
-                    <td className="border border-black py-1 px-3 font-semibold">
-                      {s.isBlocked ? (
-                        <span className="text-amber-900 font-bold uppercase tracking-wide">
-                          [BLOK] {s.blockTitle || s.subjectName}
-                        </span>
-                      ) : (
-                        s.subjectName
-                      )}
-                    </td>
-                    <td className="border border-black py-1 px-3">
-                      {s.isBlocked ? (
-                        <span className="text-slate-500 italic">Kegiatan Rutin Sekolah</span>
-                      ) : (
-                        s.teacherName
-                      )}
-                    </td>
-                    <td className="border border-black py-1 px-2 text-center font-mono">{s.room}</td>
-                  </tr>
-                ));
+                      <td className="border border-black py-1 px-3">
+                        {s.isBlocked ? (
+                          <span className="text-slate-500 italic">Kegiatan Rutin Sekolah</span>
+                        ) : (
+                          s.teacherName
+                        )}
+                      </td>
+                      <td className="border border-black py-1 px-2 text-center font-mono">{s.room}</td>
+                    </tr>
+                  );
+                });
               })}
             </tbody>
           </table>

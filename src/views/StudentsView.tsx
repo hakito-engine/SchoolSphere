@@ -475,7 +475,7 @@ export const StudentsView: React.FC = () => {
 
         <div className="flex flex-wrap items-center gap-2">
           <button
-            onClick={handleDownloadTemplate}
+            onClick={handleDownloadExcelTemplate}
             className="flex items-center gap-1.5 px-3 py-2 text-xs font-semibold rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 hover:bg-slate-50 transition-colors cursor-pointer"
             title="Download Template Excel (.xlsx) Siap Isi"
           >

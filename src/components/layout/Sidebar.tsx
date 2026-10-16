@@ -19,6 +19,7 @@ import {
   Settings,
   Database,
   ShieldAlert,
+  ShieldCheck,
   ChevronRight,
   MessageSquare,
 } from 'lucide-react';
@@ -69,7 +70,6 @@ export const Sidebar: React.FC<SidebarProps> = ({
         { id: 'journals', label: 'Jurnal Mengajar', icon: FileSpreadsheet, module: 'journals' },
         { id: 'assignments', label: 'Tugas & Penilaian', icon: GraduationCap, module: 'assignments' },
         { id: 'exams', label: 'Ujian Online (CBT)', icon: Laptop, module: 'exams' },
-        { id: 'schedule', label: 'Jadwal & Kalender', icon: Calendar, module: 'schedule' },
       ],
     },
     {
@@ -85,8 +85,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
       title: 'Layanan & Bimbingan',
       items: [
         { id: 'counseling', label: 'Bimbingan Konseling (BK)', icon: HeartHandshake, module: 'counseling' },
-        { id: 'parent_messages', label: 'Pesan ke Orang Tua', icon: MessageSquare, module: 'parent_messages' },
-        { id: 'parent_portal', label: 'Portal Orang Tua', icon: UserCheck, module: 'parent_portal' },
+        { id: 'parent_portal', label: 'Portal Orang Tua & Komunikasi', icon: UserCheck, module: 'parent_portal' },
         { id: 'analytics', label: 'Smart Analytics & Alert', icon: LineChart, module: 'analytics' },
         { id: 'announcements', label: 'Pengumuman Sekolah', icon: Megaphone, module: 'announcements' },
       ],
@@ -94,6 +93,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
     {
       title: 'Sistem & Administrasi',
       items: [
+        { id: 'users', label: 'Manajemen Pengguna', icon: ShieldCheck, module: 'users' },
         { id: 'settings', label: 'Pengaturan & Kop Surat', icon: Settings, module: 'settings' },
         { id: 'backup_audit', label: 'Audit Trail & Backup', icon: Database, module: 'audit' },
       ],

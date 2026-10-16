@@ -19,6 +19,7 @@ export const AnalyticsView: React.FC = () => {
   const students = DataService.getStudents();
   const classes = DataService.getClasses();
   const subjects = DataService.getSubjects();
+  const profile = DataService.getSchoolProfile();
 
   const [printModalOpen, setPrintModalOpen] = useState(false);
 
@@ -184,9 +185,9 @@ export const AnalyticsView: React.FC = () => {
         title="Cetak Laporan Analitik Akademik"
         documentTitle="LAPORAN ANALITIK KINERJA AKADEMIK DAN PREVENTIF"
         documentNumber="421.9 / ANL / SMA-NU / X / 2024"
-        leftSignerTitle="Wakil Kepala Sekolah Bidang Kurikulum"
-        leftSignerName="Ratna Safitri, M.Pd."
-        leftSignerNip="19850620 200902 2 005"
+        rightSignerTitle="Wakil Kepala Sekolah Bidang Kurikulum"
+        rightSignerName={profile.vicePrincipalCurriculumName || 'Dra. Hj. Nurul Hidayati, M.Pd.'}
+        rightSignerNip={profile.vicePrincipalCurriculumNip || '19790815 200501 2 006'}
       >
         <div className="space-y-4 text-xs">
           <p className="leading-relaxed">

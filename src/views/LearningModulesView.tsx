@@ -271,27 +271,47 @@ export const LearningModulesView: React.FC = () => {
                 </div>
 
                 <div className="flex items-center gap-2">
-                  {['super_admin', 'guru'].includes(currentUser.role) && (
-                    <button
-                      onClick={() => handleTogglePublish(mod)}
-                      className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold cursor-pointer ${
-                        mod.published
-                          ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300'
-                          : 'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-400'
-                      }`}
-                    >
-                      {mod.published ? (
-                        <>
-                          <Eye className="w-3.5 h-3.5 text-emerald-600" />
-                          <span>Diterbitkan</span>
-                        </>
-                      ) : (
-                        <>
-                          <EyeOff className="w-3.5 h-3.5" />
-                          <span>Draf / Privat</span>
-                        </>
-                      )}
-                    </button>
+                  {currentUser.role === 'guru' && (
+                    <>
+                      <button
+                        onClick={() => handleTogglePublish(mod)}
+                        className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold cursor-pointer ${
+                          mod.published
+                            ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300'
+                            : 'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-400'
+                        }`}
+                      >
+                        {mod.published ? (
+                          <>
+                            <Eye className="w-3.5 h-3.5 text-emerald-600" />
+                            <span>Diterbitkan</span>
+                          </>
+                        ) : (
+                          <>
+                            <EyeOff className="w-3.5 h-3.5" />
+                            <span>Draf / Privat</span>
+                          </>
+                        )}
+                      </button>
+
+                      <button
+                        onClick={() => handleOpenEdit(mod)}
+                        className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-semibold border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 hover:bg-slate-50 cursor-pointer transition-colors"
+                        title="Edit Modul Pembelajaran"
+                      >
+                        <Edit2 className="w-3.5 h-3.5 text-indigo-600" />
+                        <span>Edit</span>
+                      </button>
+
+                      <button
+                        onClick={() => handleDeleteModule(mod.id, mod.title)}
+                        className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-semibold border border-rose-200 dark:border-rose-900 bg-rose-50 dark:bg-rose-950/40 text-rose-700 dark:text-rose-300 hover:bg-rose-100 cursor-pointer transition-colors"
+                        title="Hapus Modul Pembelajaran"
+                      >
+                        <Trash2 className="w-3.5 h-3.5 text-rose-600" />
+                        <span>Hapus</span>
+                      </button>
+                    </>
                   )}
                 </div>
               </div>
@@ -364,7 +384,7 @@ export const LearningModulesView: React.FC = () => {
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
           <div className="bg-white dark:bg-slate-900 rounded-xl max-w-lg w-full p-6 border border-slate-200 dark:border-slate-800 shadow-xl">
             <h3 className="text-sm font-bold text-slate-900 dark:text-white mb-4">
-              Buat Modul Pembelajaran Baru
+              {editingModule ? 'Edit Modul Pembelajaran' : 'Buat Modul Pembelajaran Baru'}
             </h3>
             <form onSubmit={handleSave} className="space-y-3 text-xs">
               <div>

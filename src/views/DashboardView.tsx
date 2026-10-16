@@ -1,6 +1,7 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { DataService } from '../services/dataService';
+import { Student, Teacher, ClassRoom } from '../types';
 import {
   Users,
   GraduationCap,
@@ -26,9 +27,16 @@ interface DashboardViewProps {
 export const DashboardView: React.FC<DashboardViewProps> = ({ onNavigate }) => {
   const { currentUser, roleInfo, activeChildId, setActiveChildId } = useAuth();
   const profile = DataService.getSchoolProfile();
-  const students = DataService.getStudents();
-  const teachers = DataService.getTeachers();
-  const classes = DataService.getClasses();
+  const [students, setStudents] = useState<Student[]>(() => DataService.getStudents());
+  const [teachers, setTeachers] = useState<Teacher[]>(() => DataService.getTeachers());
+  const [classes, setClasses] = useState<ClassRoom[]>(() => DataService.getClasses());
+
+  useEffect(() => {
+    setStudents(DataService.getStudents());
+    setTeachers(DataService.getTeachers());
+    setClasses(DataService.getClasses());
+  }, []);
+
   const journals = DataService.getJournals();
   const assignments = DataService.getAssignments();
   const exams = DataService.getExams();
@@ -94,9 +102,9 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ onNavigate }) => {
                 <Users className="w-4 h-4 text-indigo-600" />
               </div>
               <p className="text-2xl font-bold text-slate-900 dark:text-white font-mono tabular-nums">
-                {students.length * 48}
+                {students.length}
               </p>
-              <p className="text-[11px] text-emerald-600 font-medium mt-1">100% Terverifikasi NISN</p>
+              <p className="text-[11px] text-emerald-600 font-medium mt-1">100% Terdaftar di Sistem</p>
             </div>
 
             <div className="p-4 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-2xs">
@@ -105,7 +113,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ onNavigate }) => {
                 <GraduationCap className="w-4 h-4 text-blue-600" />
               </div>
               <p className="text-2xl font-bold text-slate-900 dark:text-white font-mono tabular-nums">
-                {teachers.length + 23}
+                {teachers.length}
               </p>
               <p className="text-[11px] text-slate-500 mt-1">100% Memiliki NIP/NUPTK</p>
             </div>

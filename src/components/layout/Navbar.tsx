@@ -107,10 +107,8 @@ export const Navbar: React.FC<NavbarProps> = ({
         </div>
       </div>
 
-      {/* Kanan: Quick Role Switcher, Notifikasi, Dark Mode, Avatar */}
+      {/* Kanan: Notifikasi, Dark Mode, Avatar & Profil */}
       <div className="flex items-center gap-2 sm:gap-3">
-        {/* Quick Role Switcher (RBAC) */}
-        <QuickRoleSwitcher />
 
         {/* Notifikasi Dropdown */}
         <div className="relative">

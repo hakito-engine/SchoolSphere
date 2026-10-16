@@ -22,6 +22,37 @@ export const TeachersView: React.FC = () => {
   const { currentUser } = useAuth();
   const [teachers, setTeachers] = useState<Teacher[]>(() => DataService.getTeachers());
   const classes = DataService.getClasses();
+  const allExistingSubjects = DataService.getSubjects();
+
+  // List of subject options that can be assigned, with ability to add custom new ones
+  const [subjectOptions, setSubjectOptions] = useState<string[]>(() => {
+    const list = Array.from(
+      new Set([
+        ...allExistingSubjects.map((s) => s.name),
+        'Matematika Wajib',
+        'Matematika Peminatan',
+        'Fisika',
+        'Kimia',
+        'Biologi',
+        'Bahasa Indonesia',
+        'Bahasa Inggris',
+        'Informatika',
+        'Sejarah Indonesia',
+        'Pendidikan Agama & Budi Pekerti',
+        'Pendidikan Pancasila (PPKn)',
+        'Seni Budaya',
+        'PJOK',
+        'Ekonomi',
+        'Geografi',
+        'Sosiologi',
+        'Bimbingan & Konseling (BK)',
+      ])
+    );
+    return list;
+  });
+  const [customSubjectInput, setCustomSubjectInput] = useState('');
+  const [showAddCustomSubject, setShowAddCustomSubject] = useState(false);
+
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('all');
 
@@ -33,7 +64,7 @@ export const TeachersView: React.FC = () => {
     nip: '',
     email: '',
     phone: '',
-    subjectNames: ['Matematika'],
+    subjectNames: ['Matematika Wajib'],
     isHomeroom: false,
     employmentStatus: 'PNS',
     status: 'aktif',
@@ -62,13 +93,15 @@ export const TeachersView: React.FC = () => {
       nip: '',
       email: '',
       phone: '',
-      subjectNames: ['Fisika'],
+      subjectNames: ['Bahasa Indonesia'],
       isHomeroom: false,
       employmentStatus: 'PNS',
       status: 'aktif',
       position: 'Guru Mata Pelajaran',
       assignedClassIds: [],
     });
+    setCustomSubjectInput('');
+    setShowAddCustomSubject(false);
     setIsModalOpen(true);
   };
 
@@ -76,9 +109,12 @@ export const TeachersView: React.FC = () => {
     setEditingTeacher(tch);
     setFormData({
       ...tch,
+      subjectNames: tch.subjectNames || ['Umum'],
       assignedClassIds: tch.assignedClassIds || [],
       position: tch.position || 'Guru Mata Pelajaran',
     });
+    setCustomSubjectInput('');
+    setShowAddCustomSubject(false);
     setIsModalOpen(true);
   };
 
@@ -102,6 +138,31 @@ export const TeachersView: React.FC = () => {
     }
   };
 
+  const handleToggleSubject = (subjectName: string) => {
+    const current = formData.subjectNames || [];
+    if (current.includes(subjectName)) {
+      setFormData({ ...formData, subjectNames: current.filter((s) => s !== subjectName) });
+    } else {
+      setFormData({ ...formData, subjectNames: [...current, subjectName] });
+    }
+  };
+
+  const handleAddCustomSubject = (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+    const trimmed = customSubjectInput.trim();
+    if (!trimmed) return;
+
+    if (!subjectOptions.includes(trimmed)) {
+      setSubjectOptions((prev) => [...prev, trimmed]);
+    }
+    const current = formData.subjectNames || [];
+    if (!current.includes(trimmed)) {
+      setFormData({ ...formData, subjectNames: [...current, trimmed] });
+    }
+    setCustomSubjectInput('');
+    setShowAddCustomSubject(false);
+  };
+
   const handleSave = (e: React.FormEvent) => {
     e.preventDefault();
     if (!formData.name || !formData.nip) return;
@@ -111,7 +172,7 @@ export const TeachersView: React.FC = () => {
       id: editingTeacher ? editingTeacher.id : formData.id || 'tch-' + Date.now(),
       status: formData.status || 'aktif',
       employmentStatus: (formData.employmentStatus as TeacherEmploymentStatus) || 'PNS',
-      subjectNames: formData.subjectNames || ['Umum'],
+      subjectNames: formData.subjectNames && formData.subjectNames.length > 0 ? formData.subjectNames : ['Umum'],
       position: formData.position || 'Guru Mata Pelajaran',
       assignedClassIds: formData.assignedClassIds || [],
     };
@@ -121,6 +182,32 @@ export const TeachersView: React.FC = () => {
       name: currentUser.name,
       role: currentUser.role,
     });
+
+    // Ensure user login account is created with clean full name username & default password 123456
+    const users = DataService.getUsers();
+    const cleanU = payload.name.toLowerCase().replace(/[^a-z0-9]/g, '');
+    const userExists = users.some(
+      (u) =>
+        u.username.toLowerCase().replace(/[^a-z0-9]/g, '') === cleanU ||
+        (u.nipOrNisn && u.nipOrNisn.replace(/\s+/g, '') === payload.nip.replace(/\s+/g, ''))
+    );
+    if (!userExists) {
+      DataService.saveUser(
+        {
+          id: `usr-${payload.id}`,
+          name: payload.name,
+          email: payload.email || `${cleanU}@smanusantara.sch.id`,
+          username: cleanU,
+          password: '123456',
+          role: 'guru',
+          nipOrNisn: payload.nip,
+          phone: payload.phone,
+          status: 'aktif',
+          position: payload.position,
+        },
+        { id: currentUser.id, name: currentUser.name, role: currentUser.role }
+      );
+    }
 
     setTeachers(DataService.getTeachers());
     setIsModalOpen(false);
@@ -382,6 +469,75 @@ export const TeachersView: React.FC = () => {
                   <option value="Honorer / Guru Tidak Tetap (GTT)">Honorer / Guru Tidak Tetap (GTT)</option>
                   <option value="PPPK Paruh Waktu">PPPK Paruh Waktu / Guru Bantu</option>
                 </select>
+              </div>
+
+              {/* Pilihan Mata Pelajaran yang Diajar oleh Guru Ini (Bisa Ditambah Jika Belum Ada) */}
+              <div className="p-3 bg-slate-50 dark:bg-slate-800/60 rounded-xl border border-slate-200 dark:border-slate-700 space-y-2">
+                <div className="flex items-center justify-between">
+                  <label className="block text-slate-700 dark:text-slate-300 font-bold">
+                    Mata Pelajaran yang Diajar Guru Ini:
+                  </label>
+                  <button
+                    type="button"
+                    onClick={() => setShowAddCustomSubject(!showAddCustomSubject)}
+                    className="text-[11px] font-semibold text-indigo-600 hover:text-indigo-700 dark:text-indigo-400 flex items-center gap-1 cursor-pointer"
+                  >
+                    <Plus className="w-3.5 h-3.5" />
+                    <span>{showAddCustomSubject ? 'Tutup Form' : '+ Tambah Mapel Baru'}</span>
+                  </button>
+                </div>
+
+                <p className="text-[11px] text-slate-500">
+                  Pilih satu atau lebih mata pelajaran yang diampu. Guru dapat mengampu lebih dari satu mapel atau mapel baru:
+                </p>
+
+                {/* Form Tambah Mapel Baru Jika Belum Ada */}
+                {showAddCustomSubject && (
+                  <div className="p-2.5 rounded-lg bg-indigo-50/70 dark:bg-indigo-950/40 border border-indigo-200 dark:border-indigo-800 flex items-center gap-2">
+                    <input
+                      type="text"
+                      placeholder="Ketik nama mata pelajaran baru..."
+                      value={customSubjectInput}
+                      onChange={(e) => setCustomSubjectInput(e.target.value)}
+                      className="flex-1 px-2.5 py-1.5 rounded-md border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-900 dark:text-white text-xs"
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') {
+                          e.preventDefault();
+                          handleAddCustomSubject();
+                        }
+                      }}
+                    />
+                    <button
+                      type="button"
+                      onClick={() => handleAddCustomSubject()}
+                      className="px-3 py-1.5 rounded-md bg-indigo-600 hover:bg-indigo-700 text-white font-semibold text-xs cursor-pointer shadow-xs shrink-0"
+                    >
+                      Tambahkan
+                    </button>
+                  </div>
+                )}
+
+                {/* Grid Pilihan Mata Pelajaran */}
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 pt-1 max-h-44 overflow-y-auto pr-1">
+                  {subjectOptions.map((subj) => {
+                    const isChecked = (formData.subjectNames || []).includes(subj);
+                    return (
+                      <button
+                        type="button"
+                        key={subj}
+                        onClick={() => handleToggleSubject(subj)}
+                        className={`px-2.5 py-1.5 rounded-lg border text-left text-xs flex items-center justify-between transition-colors cursor-pointer ${
+                          isChecked
+                            ? 'bg-indigo-50 border-indigo-400 text-indigo-900 dark:bg-indigo-950 dark:border-indigo-600 dark:text-indigo-200 font-bold'
+                            : 'bg-white border-slate-200 dark:bg-slate-900 dark:border-slate-800 text-slate-600 dark:text-slate-400'
+                        }`}
+                      >
+                        <span className="truncate">{subj}</span>
+                        {isChecked && <Check className="w-3.5 h-3.5 text-indigo-600 shrink-0 ml-1" />}
+                      </button>
+                    );
+                  })}
+                </div>
               </div>
 
               {/* Rombel yang Diampu oleh Guru Ini (Membantu Jadwal Anti-Bentrok) */}
