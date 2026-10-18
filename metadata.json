@@ -1,0 +1,6 @@
+{
+  "name": "SchoolSphere LMS PRO",
+  "description": "Sistem Manajemen Sekolah dan Learning Management System (LMS) Terintegrasi by Hakito Engine",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
