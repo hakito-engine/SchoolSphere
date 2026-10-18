@@ -5,6 +5,8 @@ import {defineConfig} from 'vite';
 
 export default defineConfig(() => {
   return {
+    // Tambahkan baris ini untuk GitHub Pages
+    base: '/SchoolSphere/', 
     plugins: [react(), tailwindcss()],
     resolve: {
       alias: {
