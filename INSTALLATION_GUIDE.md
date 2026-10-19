@@ -282,10 +282,42 @@ SchoolSphere telah dilengkapi dengan kapabilitas **Progressive Web App (PWA)**:
 
 ---
 
-### 9. TROUBLESHOOTING & PEMECAHAN MASALAH
+### 9. PANDUAN DEPLOY KE GITHUB PAGES (SOLUSI LAYAR PUTIH / BLANK SCREEN)
+
+Jika Anda mempublikasikan aplikasi ini ke **GitHub Pages**, ikuti langkah berikut agar tidak terjadi kendala layar putih kosong (*blank screen*):
+
+#### Mengapa Terjadi Layar Putih?
+Layar putih terjadi jika Anda memilih *"Deploy from a branch (root)"*. GitHub Pages menyajikan file `index.html` mentah yang mencoba memuat file TypeScript `src/main.tsx`. Browser standar tidak dapat mengeksekusi file TypeScript mentah tanpa proses build Vite terlebih dahulu.
+
+#### Solusi Resmi Menggunakan GitHub Actions (3 Langkah):
+1. **Atur Sumber Pages ke GitHub Actions:**
+   - Masuk ke repositori GitHub Anda di browser.
+   - Buka menu **Settings** > **Pages**.
+   - Pada bagian **Build and deployment** > **Source**, pilih **"GitHub Actions"**.
+   - *Catatan:* Jika muncul daftar *"Suggested workflows"* (seperti Static HTML / Next.js), **JANGAN dipilih / abaikan saja** karena workflow khusus Vite sudah tersedia di `.github/workflows/deploy.yml`.
+
+2. **Jalankan Proses Build (Run Workflow):**
+   - Klik tab **Actions** di bilah menu atas repositori GitHub Anda.
+   - Di bilah samping kiri, klik nama workflow **"Deploy SchoolSphere to GitHub Pages"**.
+   - Di pojok kanan atas, klik tombol dropdown **"Run workflow"** > pilih branch `main` (atau `master`) > klik tombol hijau **"Run workflow"**.
+
+3. **Buka Aplikasi Setelah Selesai (Centang Hijau ✅):**
+   - Proses build akan berjalan sekitar 1–2 menit hingga muncul ikon centang hijau ✅.
+   - Buka tautan GitHub Pages Anda (misal `https://username.github.io/SchoolSphere/`).
+   - Tekan `Ctrl + F5` (Windows) atau `Cmd + Shift + R` (Mac) untuk refresh browser tanpa cache. Aplikasi akan langsung tampil sempurna!
+
+#### Tips Izin Alur Kerja (Workflow Permissions):
+Jika workflow di tab Actions menampilkan status gagal (*Permission Denied*), aktifkan izin:
+- Buka **Settings** > **Actions** > **General** > gulir ke bagian **Workflow permissions**.
+- Pilih opsi **"Read and write permissions"** > klik tombol **Save**.
+
+---
+
+### 10. TROUBLESHOOTING & PEMECAHAN MASALAH
 
 | Gejala Galat | Penyebab | Solusi |
 |---|---|---|
+| **Layar putih di GitHub Pages** | Belum menjalankan workflow build GitHub Actions. | Buka tab **Actions** di GitHub, klik *"Deploy SchoolSphere to GitHub Pages"*, lalu klik *"Run workflow"*. Tunggu centang hijau ✅. |
 | **Halaman 404 saat di-refresh** | Web server belum dikonfigurasi untuk SPA Rewrite. | Tambahkan baris `try_files $uri $uri/ /index.html;` pada Nginx atau aturan Rewrite pada `.htaccess` Apache. |
 | **Tampilan kosong / Blank putih** | Kesalahan base URL atau berkas JS terblokir. | Pastikan `base: './'` atau `base: '/'` sesuai dengan lokasi sub-direktori hosting Anda di `vite.config.ts`. |
 | **Port 3000 sudah terpakai** | Port bentrok dengan layanan lain. | Jalankan `npx kill-port 3000` atau gunakan flag `--port 3001` saat menjalankan `npm run dev`. |

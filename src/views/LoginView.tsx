@@ -73,7 +73,7 @@ export const LoginView: React.FC = () => {
       cleanAdminPhone = '62' + cleanAdminPhone.substring(1);
     }
     const textMsg = encodeURIComponent(
-      `Halo Super Admin SchoolSphere (${profile.name}),\n\nSaya memohon bantuan reset kata sandi (password) akun LMS:\n- Nama Lengkap: ${forgotName}\n- Username / NIP / NISN: ${forgotIdentifier}\n- No. WhatsApp Saya: ${forgotWaNumber}\n\nMohon bantuannya untuk mengirimkan kata sandi baru akun saya melalui pesan WhatsApp ini. Terima kasih.`
+      `Halo Super Admin SchoolSphere (${profile.name}),\n\nSaya memohon bantuan reset kata sandi (password) akun portal sekolah:\n- Nama Lengkap: ${forgotName}\n- Username / NIP / NISN: ${forgotIdentifier}\n- No. WhatsApp Saya: ${forgotWaNumber}\n\nMohon bantuannya untuk mengirimkan kata sandi baru akun saya melalui pesan WhatsApp ini. Terima kasih.`
     );
     const waUrl = `https://api.whatsapp.com/send?phone=${cleanAdminPhone}&text=${textMsg}`;
     setForgotWaLink(waUrl);
@@ -101,7 +101,7 @@ export const LoginView: React.FC = () => {
           </div>
 
           <h1 className="text-2xl font-extrabold tracking-tight text-slate-900 dark:text-white">
-            SchoolSphere <span className="text-indigo-600 dark:text-indigo-400">LMS PRO</span>
+            SchoolSphere <span className="text-indigo-600 dark:text-indigo-400">PRO</span>
           </h1>
           <p className="text-xs font-semibold text-slate-600 dark:text-slate-400 uppercase tracking-wider">
             {profile.name}
@@ -199,7 +199,7 @@ export const LoginView: React.FC = () => {
               className="w-full mt-2 flex items-center justify-center gap-2 py-2.5 px-4 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-semibold shadow-md transition-colors cursor-pointer disabled:opacity-50"
             >
               <LogIn className="w-4 h-4" />
-              <span>{loading ? 'Memverifikasi Akun...' : 'Masuk ke Sistem LMS'}</span>
+              <span>{loading ? 'Memverifikasi Akun...' : 'Masuk ke Portal Sekolah'}</span>
             </button>
           </form>
 
@@ -225,7 +225,7 @@ export const LoginView: React.FC = () => {
 
         {/* Quiet Footer */}
         <div className="mt-6 text-center text-[11px] text-slate-400">
-          <p>SchoolSphere LMS Enterprise · Role-Based Access Control</p>
+          <p>SchoolSphere Enterprise · Role-Based Access Control</p>
           <p className="mt-0.5 text-[10px] font-mono">Keamanan data terverifikasi · Multi-User Session Protection</p>
         </div>
       </div>

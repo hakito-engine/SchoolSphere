@@ -159,7 +159,7 @@ export const LearningModulesView: React.FC = () => {
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
           <h2 className="text-lg font-bold text-slate-900 dark:text-white">
-            Modul Pembelajaran & Bahan Ajar (LMS)
+            Modul Pembelajaran & Bahan Ajar
           </h2>
           <p className="text-xs text-slate-500">
             Kumpulan bahan ajar digital, tujuan capaian pembelajaran, diktat PDF, video referensi, dan aktivitas mandiri.

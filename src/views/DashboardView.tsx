@@ -490,7 +490,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ onNavigate }) => {
               </h3>
               <div className="space-y-2.5 text-xs">
                 <div className="flex items-center justify-between pb-2 border-b border-slate-100 dark:border-slate-800">
-                  <span className="text-slate-600 dark:text-slate-400">Modul Pembelajaran & LMS</span>
+                  <span className="text-slate-600 dark:text-slate-400">Modul & Bahan Ajar Digital</span>
                   <span className="font-semibold text-emerald-600">Aktif</span>
                 </div>
                 <div className="flex items-center justify-between pb-2 border-b border-slate-100 dark:border-slate-800">

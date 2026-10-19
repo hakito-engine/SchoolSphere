@@ -1819,10 +1819,25 @@ export class DataService {
     setStoredItem('notifications', updated);
   }
 
-  // --- Backup & Restore & Reset ---
+  // --- Backup & Restore & Multi-Device Sync ---
   static exportDatabaseJSON(): string {
+    // Collect CBT completion and scores
+    const cbtData: Record<string, any> = {};
+    for (let i = 0; i < localStorage.length; i++) {
+      const key = localStorage.key(i);
+      if (key && (key.startsWith(STORAGE_PREFIX + 'cbt_') || key.startsWith(STORAGE_PREFIX + 'cbt_scores_'))) {
+        const subKey = key.replace(STORAGE_PREFIX, '');
+        try {
+          cbtData[subKey] = JSON.parse(localStorage.getItem(key) || '{}');
+        } catch {
+          cbtData[subKey] = localStorage.getItem(key);
+        }
+      }
+    }
+
     const dump = {
-      version: '1.0.0-PRO',
+      version: '2.0.0-PRO-SYNC',
+      app: 'SchoolSphere Enterprise',
       exportedAt: new Date().toISOString(),
       schoolProfile: this.getSchoolProfile(),
       academicYears: this.getAcademicYears(),
@@ -1837,10 +1852,17 @@ export class DataService {
       assignments: this.getAssignments(),
       submissions: this.getSubmissions(),
       exams: this.getExams(),
+      examSubmissions: this.getExamSubmissions(),
       schedule: this.getSchedule(),
+      scheduleBlocks: this.getScheduleBlocks(),
+      lessonPeriodConfig: this.getLessonPeriodConfig(),
       counseling: this.getCounselingRecords(),
       announcements: this.getAnnouncements(),
+      notifications: this.getNotifications(),
+      parentMessages: this.getParentMessages(),
+      teacherStudentMessages: this.getTeacherStudentMessages(),
       auditLogs: this.getAuditLogs(),
+      cbtData,
     };
     return JSON.stringify(dump, null, 2);
   }
@@ -1849,6 +1871,7 @@ export class DataService {
     try {
       const parsed = JSON.parse(jsonStr);
       if (parsed.schoolProfile) setStoredItem('school_profile', parsed.schoolProfile);
+      if (parsed.academicYears) setStoredItem('academic_years', parsed.academicYears);
       if (parsed.users) setStoredItem('users', parsed.users);
       if (parsed.students) setStoredItem('students', parsed.students);
       if (parsed.teachers) setStoredItem('teachers', parsed.teachers);
@@ -1860,10 +1883,28 @@ export class DataService {
       if (parsed.assignments) setStoredItem('assignments', parsed.assignments);
       if (parsed.submissions) setStoredItem('submissions', parsed.submissions);
       if (parsed.exams) setStoredItem('exams', parsed.exams);
+      if (parsed.examSubmissions) setStoredItem('exam_submissions', parsed.examSubmissions);
+      if (parsed.schedule) setStoredItem('schedule', parsed.schedule);
+      if (parsed.scheduleBlocks) setStoredItem('schedule_blocks', parsed.scheduleBlocks);
+      if (parsed.lessonPeriodConfig) setStoredItem('lesson_period_config', parsed.lessonPeriodConfig);
       if (parsed.counseling) setStoredItem('counseling', parsed.counseling);
       if (parsed.announcements) setStoredItem('announcements', parsed.announcements);
+      if (parsed.notifications) setStoredItem('notifications', parsed.notifications);
+      if (parsed.parentMessages) setStoredItem('parent_messages', parsed.parentMessages);
+      if (parsed.teacherStudentMessages) setStoredItem('teacher_student_messages', parsed.teacherStudentMessages);
+      if (parsed.auditLogs) setStoredItem('audit_logs', parsed.auditLogs);
 
-      this.logAction(currentUser, 'IMPORT_DATA', 'Backup & Restore', 'Memulihkan database dari berkas backup JSON.');
+      if (parsed.cbtData && typeof parsed.cbtData === 'object') {
+        Object.entries(parsed.cbtData).forEach(([k, v]) => {
+          try {
+            localStorage.setItem(STORAGE_PREFIX + k, JSON.stringify(v));
+          } catch {
+            // ignore
+          }
+        });
+      }
+
+      this.logAction(currentUser, 'IMPORT_DATA', 'Backup & Restore', 'Memulihkan database sinkronisasi antar perangkat dari berkas backup JSON.');
       return true;
     } catch (e) {
       console.error('Import failed', e);
@@ -1872,6 +1913,13 @@ export class DataService {
   }
 
   static resetToDefault(): void {
-    localStorage.clear();
+    const keysToRemove: string[] = [];
+    for (let i = 0; i < localStorage.length; i++) {
+      const k = localStorage.key(i);
+      if (k && k.startsWith(STORAGE_PREFIX)) {
+        keysToRemove.push(k);
+      }
+    }
+    keysToRemove.forEach((k) => localStorage.removeItem(k));
   }
 }

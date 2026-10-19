@@ -63,7 +63,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
       ],
     },
     {
-      title: 'Pembelajaran (LMS)',
+      title: 'Pembelajaran & Materi',
       items: [
         { id: 'modules', label: 'Modul Pembelajaran', icon: BookOpen, module: 'modules' },
         { id: 'attendance', label: 'Presensi & Kehadiran', icon: CalendarCheck, module: 'attendance' },
@@ -130,7 +130,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
                   SCHOOLSPHERE
                 </p>
                 <p className="text-[10px] text-indigo-600 dark:text-indigo-400 font-semibold tracking-widest uppercase">
-                  LMS PRO
+                  ENTERPRISE PRO
                 </p>
               </div>
             )}
@@ -213,7 +213,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
         {/* Footer info */}
         {isExpanded && (
           <div className="p-3 border-t border-slate-200 dark:border-slate-800 text-[11px] text-slate-400 text-center">
-            <p className="font-semibold text-slate-600 dark:text-slate-300">SchoolSphere LMS PRO</p>
+            <p className="font-semibold text-slate-600 dark:text-slate-300">SchoolSphere PRO</p>
             <p className="text-[10px]">Hakito Engine v2.4</p>
           </div>
         )}

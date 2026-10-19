@@ -3,6 +3,7 @@ import { AuthProvider, useAuth } from './context/AuthContext';
 import { Navbar } from './components/layout/Navbar';
 import { Sidebar } from './components/layout/Sidebar';
 import { GlobalSearchModal } from './components/common/GlobalSearchModal';
+import { ErrorBoundary } from './components/common/ErrorBoundary';
 
 // Views
 import { DashboardView } from './views/DashboardView';
@@ -155,7 +156,7 @@ const AuthenticatedApp: React.FC = () => {
         {/* Quiet Footer */}
         <footer className="no-print border-t border-slate-200 dark:border-slate-800 py-4 px-6 text-center text-[11px] text-slate-500 flex flex-col sm:flex-row items-center justify-between gap-2">
           <span>
-            SchoolSphere LMS PRO by Hakito Engine · Terintegrasi Kurikulum Merdeka
+            SchoolSphere PRO by Hakito Engine · Terintegrasi Kurikulum Merdeka
           </span>
           <span className="font-mono text-slate-400">
             Arsitektur Modular Standar GAS-Ready · Autentikasi RBAC 8 Peran
@@ -185,8 +186,10 @@ function MainContent() {
 
 export default function App() {
   return (
-    <AuthProvider>
-      <MainContent />
-    </AuthProvider>
+    <ErrorBoundary>
+      <AuthProvider>
+        <MainContent />
+      </AuthProvider>
+    </ErrorBoundary>
   );
 }

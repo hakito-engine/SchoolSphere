@@ -1298,7 +1298,7 @@ export const INITIAL_TEACHER_STUDENT_MESSAGES: TeacherStudentMessage[] = [
     isBroadcastToClass: true,
     category: 'Pengumuman Mapel',
     title: 'Persiapan Kuis Bab Nilai Mutlak Pekan Depan',
-    content: 'Selamat pagi anak-anak kelas X MIPA 1. Mohon pelajari kembali latihan mandiri Bab 1 di modul LMS. Kuis akan diadakan pada hari Rabu jam ke-2.',
+    content: 'Selamat pagi anak-anak kelas X MIPA 1. Mohon pelajari kembali latihan mandiri Bab 1 di modul pembelajaran. Kuis akan diadakan pada hari Rabu jam ke-2.',
     sentAt: '2024-10-10 09:15',
   },
   {

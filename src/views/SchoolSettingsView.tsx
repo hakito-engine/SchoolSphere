@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { DataService } from '../services/dataService';
 import { SchoolProfile, AuditLog, AcademicYearConfig } from '../types';
@@ -321,6 +321,45 @@ def health():
     URL.revokeObjectURL(url);
   };
 
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      try {
+        const content = event.target?.result as string;
+        const ok = DataService.importDatabaseJSON(content, {
+          id: currentUser.id,
+          name: currentUser.name,
+          role: currentUser.role,
+        });
+        if (ok) {
+          setImportStatus('✅ Berhasil menyinkronkan seluruh data dari berkas! Data kini sama persis.');
+          setProfile(DataService.getSchoolProfile());
+          setAcademicYears(DataService.getAcademicYears());
+          setAuditLogs(DataService.getAuditLogs());
+          setSaveSuccess(true);
+          setSaveMessage('Sinkronisasi Berhasil! Data di perangkat ini telah diperbarui.');
+          setTimeout(() => {
+            if (confirm('Sinkronisasi data berhasil! Apakah Anda ingin memuat ulang halaman untuk menyegarkan seluruh tampilan?')) {
+              window.location.reload();
+            }
+          }, 300);
+        } else {
+          setImportStatus('❌ Gagal memproses berkas. Pastikan format file adalah cadangan JSON resmi SchoolSphere.');
+        }
+      } catch (err) {
+        console.error(err);
+        setImportStatus('❌ Terjadi kesalahan saat membaca berkas.');
+      }
+    };
+    reader.readAsText(file);
+    e.target.value = '';
+  };
+
   const handleImportBackup = () => {
     if (!importJsonText) return;
     const ok = DataService.importDatabaseJSON(importJsonText, {
@@ -334,6 +373,8 @@ def health():
       setAcademicYears(DataService.getAcademicYears());
       setAuditLogs(DataService.getAuditLogs());
       setImportJsonText('');
+      setSaveSuccess(true);
+      setSaveMessage('Data berhasil dipulihkan!');
     } else {
       setImportStatus('Format JSON tidak valid atau gagal diproses.');
     }
@@ -463,13 +504,17 @@ def health():
         </button>
         <button
           onClick={() => setActiveTab('backup')}
-          className={`pb-2.5 px-3 transition-colors whitespace-nowrap cursor-pointer ${
+          className={`pb-2.5 px-3 transition-colors whitespace-nowrap cursor-pointer flex items-center gap-1.5 ${
             activeTab === 'backup'
               ? 'border-b-2 border-indigo-600 text-indigo-600 dark:text-indigo-400 font-bold'
               : 'text-slate-500 hover:text-slate-700'
           }`}
         >
-          Backup & Restore
+          <Cloud className="w-3.5 h-3.5 text-indigo-600" />
+          <span>Cadangan & Sinkronisasi Antar Perangkat</span>
+          <span className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-indigo-100 text-indigo-800 dark:bg-indigo-950 dark:text-indigo-300">
+            Perangkat A ➔ B
+          </span>
         </button>
         <button
           onClick={() => setActiveTab('audit')}
@@ -1907,34 +1952,48 @@ def health():
                 Secara bawaan, GitHub Pages menyajikan berkas mentah dari branch <code>main / (root)</code>. Berkas <code>index.html</code> di root memanggil file TypeScript mentah <code>/src/main.tsx</code> yang tidak dapat dieksekusi langsung oleh browser tanpa dikompilasi oleh Vite terlebih dahulu.
               </p>
 
-              <div className="p-3 rounded-xl bg-white dark:bg-slate-900 border border-amber-300 dark:border-amber-800/80 space-y-2 text-slate-800 dark:text-slate-200">
+              <div className="p-4 rounded-xl bg-white dark:bg-slate-900 border border-amber-300 dark:border-amber-800/80 space-y-3 text-slate-800 dark:text-slate-200">
                 <span className="font-bold text-xs text-indigo-600 dark:text-indigo-400 block">
-                  Langkah Mudah Deploy Otomatis Menggunakan GitHub Actions (Disarankan):
+                  Langkah-Langkah Menjalankan Deployment GitHub Actions (Hanya 3 Klik):
                 </span>
-                <ol className="list-decimal list-inside space-y-1 text-xs">
-                  <li>
-                    Buka repositori GitHub Anda di browser (misal: <code>https://github.com/username/SchoolSphere</code>).
-                  </li>
-                  <li>
-                    Klik tab <strong>Settings</strong> di menu atas repositori.
-                  </li>
-                  <li>
-                    Pilih menu <strong>Pages</strong> di bilah navigasi samping kiri.
-                  </li>
-                  <li>
-                    Pada bagian <strong>Build and deployment &gt; Source</strong>, ubah dari <em>"Deploy from a branch"</em> menjadi <strong>"GitHub Actions"</strong>.
-                  </li>
-                  <li>
-                    Selesai! Berkas alur kerja otomatis <code>.github/workflows/deploy.yml</code> yang telah kami buat akan otomatis mengompilasi Vite dan mempublikasikan folder <code>dist/</code> ke GitHub Pages setiap kali Anda melakukan push.
-                  </li>
-                </ol>
+                
+                <div className="space-y-2 text-xs">
+                  <div className="flex gap-2">
+                    <span className="flex-none flex items-center justify-center w-5 h-5 rounded-full bg-indigo-100 text-indigo-700 dark:bg-indigo-900 dark:text-indigo-300 font-bold text-[11px]">1</span>
+                    <p>
+                      <strong>Ubah Source ke GitHub Actions:</strong> Di repo GitHub, buka <strong>Settings &gt; Pages</strong>. Pada bagian <em>Source</em>, pilih <strong>"GitHub Actions"</strong>. <br />
+                      <span className="text-amber-700 dark:text-amber-400 font-medium">⚠️ Catatan: Jika muncul daftar <em>"Suggested workflows"</em> (seperti Static HTML / Next.js), <u>JANGAN dipilih / abaikan saja</u> karena berkas workflow khusus Vite sudah kami sediakan di <code>.github/workflows/deploy.yml</code>.</span>
+                    </p>
+                  </div>
+
+                  <div className="flex gap-2">
+                    <span className="flex-none flex items-center justify-center w-5 h-5 rounded-full bg-indigo-100 text-indigo-700 dark:bg-indigo-900 dark:text-indigo-300 font-bold text-[11px]">2</span>
+                    <p>
+                      <strong>Jalankan Workflow (Build):</strong> Klik tab <strong>Actions</strong> di menu atas repositori GitHub Anda. Di sisi kiri, klik nama workflow <strong>"Deploy SchoolSphere to GitHub Pages"</strong>. Kemudian di sebelah kanan atas, klik tombol dropdown <strong>"Run workflow"</strong>, pilih branch <code>main</code> (atau <code>master</code>), lalu klik tombol hijau <strong>"Run workflow"</strong>.
+                    </p>
+                  </div>
+
+                  <div className="flex gap-2">
+                    <span className="flex-none flex items-center justify-center w-5 h-5 rounded-full bg-indigo-100 text-indigo-700 dark:bg-indigo-900 dark:text-indigo-300 font-bold text-[11px]">3</span>
+                    <p>
+                      <strong>Tunggu Centang Hijau (✅):</strong> Proses kompilasi Vite akan berjalan otomatis selama 1–2 menit. Setelah ikon berubah menjadi centang hijau ✅, klik tautan website GitHub Pages Anda. Tekan <code>Ctrl + F5</code> (Windows) atau <code>Cmd + Shift + R</code> (Mac) untuk memuat ulang dan menghapus cache browser lama. Layar aplikasi SchoolSphere akan langsung tampil sempurna tanpa layar putih!
+                    </p>
+                  </div>
+
+                  <div className="flex gap-2 pt-1 border-t border-slate-100 dark:border-slate-800">
+                    <span className="flex-none flex items-center justify-center w-5 h-5 rounded-full bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300 font-bold text-[11px]">ℹ️</span>
+                    <p className="text-[11px] text-slate-500 dark:text-slate-400">
+                      <strong>Tips jika alur kerja gagal izin (Permission Denied):</strong> Masuk ke <strong>Settings &gt; Actions &gt; General &gt; Workflow permissions</strong>, pilih <em>"Read and write permissions"</em> lalu klik <strong>Save</strong>.
+                    </p>
+                  </div>
+                </div>
               </div>
 
               <div className="flex items-center gap-2 pt-1 text-[11px] text-amber-800 dark:text-amber-300">
                 <span>✓ Konfigurasi <code>base: './'</code> di <code>vite.config.ts</code> sudah aktif (kompatibel untuk subfolder maupun domain kustom).</span>
               </div>
               <div className="flex items-center gap-2 text-[11px] text-amber-800 dark:text-amber-300">
-                <span>✓ Berkas <code>public/404.html</code> dan <code>public/favicon.ico</code> sudah ditambahkan agar refresh halaman tidak galat 404.</span>
+                <span>✓ Berkas <code>public/404.html</code>, preloader anti layar putih, dan ErrorBoundary pemulihan otomatis sudah aktif.</span>
               </div>
             </div>
           </div>
@@ -2198,66 +2257,163 @@ def health():
         </div>
       )}
 
-      {/* TAB 5: BACKUP & RESTORE */}
+      {/* TAB 5: BACKUP & SINKRONISASI ANTAR PERANGKAT */}
       {activeTab === 'backup' && (
-        <div className="p-6 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 space-y-6 text-xs">
-          <div className="flex items-center justify-between">
-            <div>
-              <h3 className="font-bold text-sm text-slate-900 dark:text-white">
-                Cadangan Data & Pemulihan (JSON Dump)
-              </h3>
-              <p className="text-slate-500 text-xs">
-                Ekspor seluruh data sekolah, siswa, guru, presensi, modul, dan audit log ke file cadangan.
-              </p>
+        <div className="space-y-6 text-xs">
+          {/* Banner Edukasi: Penjelasan Mengapa Data Tidak Otomatis Sinkron di GitHub Pages */}
+          <div className="p-5 rounded-2xl bg-indigo-50 dark:bg-indigo-950/40 border border-indigo-200 dark:border-indigo-800 text-slate-800 dark:text-slate-200 space-y-3">
+            <div className="flex items-center gap-2.5">
+              <div className="p-2 rounded-xl bg-indigo-600 text-white font-bold text-xs shrink-0">
+                <Cloud className="w-5 h-5" />
+              </div>
+              <div>
+                <h3 className="font-bold text-sm text-indigo-950 dark:text-indigo-200">
+                  Solusi Sinkronisasi Data Antar Perangkat (Perangkat A ➔ Perangkat B)
+                </h3>
+                <p className="text-[11px] text-slate-500 dark:text-slate-400">
+                  Memahami cara kerja penyimpanan data saat aplikasi dijalankan di GitHub Pages.
+                </p>
+              </div>
             </div>
-            <button
-              onClick={handleExportBackup}
-              className="flex items-center gap-2 px-4 py-2 font-semibold text-white bg-indigo-600 hover:bg-indigo-700 rounded-lg cursor-pointer"
-            >
-              <Download className="w-4 h-4" />
-              <span>Unduh Berkas Backup (.json)</span>
-            </button>
+
+            <div className="text-xs text-slate-600 dark:text-slate-300 space-y-2 leading-relaxed bg-white/80 dark:bg-slate-900/80 p-3.5 rounded-xl border border-indigo-100 dark:border-indigo-900">
+              <p>
+                <strong>Mengapa saat update di Perangkat A tidak otomatis muncul di Perangkat B?</strong><br />
+                GitHub Pages adalah layanan <em>static hosting</em> (hanya melayani file HTML, CSS, JS). GitHub Pages <strong>tidak memiliki server basis data terpusat</strong>. Oleh karena itu, semua data yang Anda input atau ubah disimpan di memori peramban (<em>localStorage</em>) lokal milik perangkat A. Perangkat B memiliki memori lokalnya sendiri.
+              </p>
+              <div className="pt-1 flex items-center gap-1.5 text-indigo-700 dark:text-indigo-400 font-semibold">
+                <Sparkles className="w-4 h-4 shrink-0" />
+                <span>Gunakan 2 langkah mudah di bawah ini untuk menyinkronkan data antar perangkat dalam 1 detik:</span>
+              </div>
+            </div>
           </div>
 
-          <div className="space-y-2 pt-4 border-t border-slate-100 dark:border-slate-800">
-            <label className="block text-slate-700 dark:text-slate-300 font-semibold">
-              Pulihkan Data dari JSON
-            </label>
+          {/* Kartu Langkah Sinkronisasi 1-Klik */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {/* Langkah 1: Ekspor dari Perangkat A */}
+            <div className="p-5 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 space-y-3 flex flex-col justify-between shadow-2xs">
+              <div className="space-y-2">
+                <div className="flex items-center gap-2">
+                  <span className="w-6 h-6 rounded-full bg-indigo-100 text-indigo-700 dark:bg-indigo-950 dark:text-indigo-300 font-bold flex items-center justify-center text-xs">
+                    1
+                  </span>
+                  <h4 className="font-bold text-sm text-slate-900 dark:text-white">
+                    Di Perangkat Asal (Perangkat A)
+                  </h4>
+                </div>
+                <p className="text-slate-500 text-xs leading-relaxed">
+                  Unduh seluruh basis data terbaru (siswa, guru, jadwal, absensi, modul, nilai ujian, & profil sekolah) menjadi satu berkas cadangan aman.
+                </p>
+              </div>
+
+              <div className="pt-2">
+                <button
+                  type="button"
+                  onClick={handleExportBackup}
+                  className="w-full flex items-center justify-center gap-2 px-4 py-2.5 font-bold text-white bg-indigo-600 hover:bg-indigo-700 rounded-xl shadow-xs transition-colors cursor-pointer"
+                >
+                  <Download className="w-4 h-4" />
+                  <span>Unduh Berkas Cadangan (.json)</span>
+                </button>
+                <p className="text-[10px] text-slate-400 text-center mt-2">
+                  Kirim file ini ke Perangkat B (via WhatsApp Web, Email, atau Flashdisk).
+                </p>
+              </div>
+            </div>
+
+            {/* Langkah 2: Impor ke Perangkat B */}
+            <div className="p-5 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 space-y-3 flex flex-col justify-between shadow-2xs">
+              <div className="space-y-2">
+                <div className="flex items-center gap-2">
+                  <span className="w-6 h-6 rounded-full bg-emerald-100 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300 font-bold flex items-center justify-center text-xs">
+                    2
+                  </span>
+                  <h4 className="font-bold text-sm text-slate-900 dark:text-white">
+                    Di Perangkat Tujuan (Perangkat B)
+                  </h4>
+                </div>
+                <p className="text-slate-500 text-xs leading-relaxed">
+                  Buka link website yang sama di Perangkat B, lalu unggah berkas <code>.json</code> yang tadi diunduh. Semua data akan langsung sama persis!
+                </p>
+              </div>
+
+              <div className="pt-2">
+                <input
+                  type="file"
+                  ref={fileInputRef}
+                  accept=".json"
+                  onChange={handleFileUpload}
+                  className="hidden"
+                />
+                <button
+                  type="button"
+                  onClick={() => fileInputRef.current?.click()}
+                  className="w-full flex items-center justify-center gap-2 px-4 py-2.5 font-bold text-white bg-emerald-600 hover:bg-emerald-700 rounded-xl shadow-xs transition-colors cursor-pointer"
+                >
+                  <Upload className="w-4 h-4" />
+                  <span>Pilih & Unggah Berkas (.json)</span>
+                </button>
+                <p className="text-[10px] text-slate-400 text-center mt-2">
+                  Otomatis memuat dan menyinkronkan seluruh tabel data dalam sekejap.
+                </p>
+              </div>
+            </div>
+          </div>
+
+          {importStatus && (
+            <div className="p-3.5 rounded-xl bg-indigo-50 dark:bg-indigo-950/60 border border-indigo-200 dark:border-indigo-800 text-indigo-900 dark:text-indigo-200 font-medium text-xs flex items-center gap-2">
+              <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+              <span>{importStatus}</span>
+            </div>
+          )}
+
+          {/* Opsi Manual Salin & Tempel JSON */}
+          <div className="p-5 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 space-y-3">
+            <div className="flex items-center justify-between">
+              <div>
+                <h4 className="font-bold text-slate-800 dark:text-slate-200">
+                  Opsi Alternatif: Pulihkan Data via Tempel Teks (Paste JSON)
+                </h4>
+                <p className="text-[11px] text-slate-500">
+                  Gunakan ini jika Anda ingin menyalin dan menempel langsung kode JSON tanpa mengunggah berkas.
+                </p>
+              </div>
+            </div>
             <textarea
-              rows={4}
+              rows={3}
               value={importJsonText}
               onChange={(e) => setImportJsonText(e.target.value)}
               placeholder="Tempelkan isi berkas JSON cadangan di sini..."
               className="w-full p-3 font-mono text-[11px] rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white"
             />
-            {importStatus && (
-              <p className="text-xs text-indigo-600 dark:text-indigo-400 font-semibold">{importStatus}</p>
-            )}
             <div className="flex justify-end">
               <button
+                type="button"
                 onClick={handleImportBackup}
                 disabled={!importJsonText.trim()}
-                className="flex items-center gap-2 px-4 py-2 font-semibold text-white bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 rounded-lg cursor-pointer"
+                className="flex items-center gap-2 px-4 py-2 font-semibold text-white bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 rounded-lg cursor-pointer"
               >
-                <Upload className="w-4 h-4" />
-                <span>Proses Pemulihan Data</span>
+                <Check className="w-4 h-4" />
+                <span>Terapkan Teks JSON</span>
               </button>
             </div>
           </div>
 
-          <div className="pt-4 border-t border-rose-100 dark:border-rose-950/60 flex items-center justify-between">
+          {/* Reset Database */}
+          <div className="p-4 rounded-xl bg-rose-50/50 dark:bg-rose-950/20 border border-rose-200 dark:border-rose-900/60 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
             <div>
-              <h4 className="font-bold text-rose-600 dark:text-rose-400">Atur Ulang ke Data Awal Demo</h4>
+              <h4 className="font-bold text-rose-700 dark:text-rose-400">Atur Ulang ke Data Awal Demo</h4>
               <p className="text-slate-500 text-[11px]">
-                Menghapus semua perubahan lokal dan mengembalikan data bawaan aplikasi.
+                Menghapus seluruh perubahan lokal pada browser ini dan mengembalikan data bawaan demonstrasi.
               </p>
             </div>
             <button
+              type="button"
               onClick={handleResetData}
-              className="flex items-center gap-1.5 px-3 py-1.5 text-rose-600 border border-rose-200 dark:border-rose-900 rounded-lg hover:bg-rose-50 dark:hover:bg-rose-950 font-semibold cursor-pointer"
+              className="flex items-center gap-1.5 px-3.5 py-2 text-rose-700 dark:text-rose-300 border border-rose-300 dark:border-rose-800 rounded-lg hover:bg-rose-100 dark:hover:bg-rose-950 font-semibold cursor-pointer shrink-0"
             >
               <RotateCcw className="w-3.5 h-3.5" />
-              <span>Reset Database</span>
+              <span>Reset Database Lokal</span>
             </button>
           </div>
         </div>
