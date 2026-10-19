@@ -415,10 +415,10 @@ export const TeachersView: React.FC = () => {
 
       {/* Modal Add/Edit Teacher with Full Scrolling (Requirement 3) */}
       {isModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs p-3 sm:p-4 overflow-y-auto">
+        <div className="fixed inset-0 z-50 flex items-start justify-center bg-black/60 backdrop-blur-xs p-2 sm:p-4 py-4 sm:py-8 overflow-y-auto">
           <div className="bg-white dark:bg-slate-900 rounded-2xl max-w-xl w-full border border-slate-200 dark:border-slate-800 shadow-2xl flex flex-col max-h-[90vh] my-auto overflow-hidden animate-in fade-in duration-200">
             {/* Modal Header - Fixed at Top */}
-            <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100 dark:border-slate-800 bg-slate-50/80 dark:bg-slate-800/50 shrink-0">
+            <div className="sticky top-0 z-20 flex items-center justify-between px-6 py-4 border-b border-slate-100 dark:border-slate-800 bg-white/95 dark:bg-slate-900/95 backdrop-blur-xs shrink-0">
               <div className="flex items-center gap-2.5">
                 <div className="p-2 rounded-lg bg-indigo-50 dark:bg-indigo-950 text-indigo-600 dark:text-indigo-400">
                   <UserCheck className="w-5 h-5" />
@@ -428,7 +428,7 @@ export const TeachersView: React.FC = () => {
                     {editingTeacher ? 'Ubah Data Tenaga Pendidik' : 'Tambah Tenaga Pendidik (Guru)'}
                   </h3>
                   <p className="text-[11px] text-slate-500">
-                    Form isian data guru lengkap dapat digulir dari atas ke bawah.
+                    Formulir lengkap dapat digulir dari atas ke bawah untuk mengisi semua data.
                   </p>
                 </div>
               </div>
@@ -444,7 +444,13 @@ export const TeachersView: React.FC = () => {
 
             <form onSubmit={handleSave} className="flex-1 flex flex-col min-h-0 overflow-hidden">
               {/* Scrollable Form Body - From Top to Bottom */}
-              <div className="flex-1 overflow-y-auto p-6 space-y-4 text-xs overscroll-contain">
+              <div 
+                className="flex-1 overflow-y-auto p-6 space-y-4 text-xs overscroll-contain"
+                style={{ maxHeight: 'calc(90vh - 130px)' }}
+              >
+                <div className="flex items-center justify-between p-2.5 rounded-lg bg-indigo-50/80 dark:bg-indigo-950/50 border border-indigo-200 dark:border-indigo-800 text-indigo-800 dark:text-indigo-300 text-[11px]">
+                  <span>📜 Gulir ke bawah untuk melengkapi data NIP, Mata Pelajaran, Rombel, Email, dan No. WA.</span>
+                </div>
               <div>
                 <label className="block text-slate-600 dark:text-slate-400 font-medium mb-1">
                   Nama Lengkap beserta Gelar
@@ -633,7 +639,7 @@ export const TeachersView: React.FC = () => {
             </div>
 
             {/* Modal Footer - Fixed at Bottom */}
-            <div className="flex items-center justify-between px-6 py-3.5 border-t border-slate-100 dark:border-slate-800 bg-slate-50/80 dark:bg-slate-800/50 shrink-0">
+            <div className="sticky bottom-0 z-20 flex items-center justify-between px-6 py-3.5 border-t border-slate-100 dark:border-slate-800 bg-slate-50/95 dark:bg-slate-800/95 backdrop-blur-xs shrink-0">
               <span className="text-[11px] text-slate-400">
                 Semua isian bertanda wajib diisi
               </span>

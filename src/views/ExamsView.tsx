@@ -43,16 +43,14 @@ export const ExamsView: React.FC = () => {
   );
   const effectiveStudentId = currentStudent?.id || currentUser.id;
 
-  // Completed exams state for student (Requirement 2: Cegah pengerjaan ulang setelah selesai)
+  // Completed exams state (Requirement 2: Cegah pengerjaan ulang setelah selesai dikerjakan)
   const [completedExamIds, setCompletedExamIds] = useState<string[]>(() => {
-    return currentUser.role === 'siswa'
-      ? Array.from(
-          new Set([
-            ...DataService.getCompletedExamIds(effectiveStudentId, currentUser.name),
-            ...DataService.getCompletedExamIds(currentUser.id, currentUser.name),
-          ])
-        )
-      : [];
+    return Array.from(
+      new Set([
+        ...DataService.getCompletedExamIds(effectiveStudentId, currentUser.name),
+        ...DataService.getCompletedExamIds(currentUser.id, currentUser.name),
+      ])
+    );
   });
 
   // Filter exams:
@@ -161,15 +159,14 @@ export const ExamsView: React.FC = () => {
   }, [isTakingExam, timeLeftSeconds]);
 
   const handleStartExam = (exam: OnlineExam) => {
-    // If student has already completed this exam, prevent retake (Requirement 2)
+    // If exam has already been completed, prevent retake (Requirement 2)
     const isAlreadyDone =
-      currentUser.role === 'siswa' &&
-      (completedExamIds.includes(exam.id) ||
-        DataService.getCompletedExamIds(effectiveStudentId, currentUser.name).includes(exam.id) ||
-        DataService.getCompletedExamIds(currentUser.id, currentUser.name).includes(exam.id));
+      completedExamIds.includes(exam.id) ||
+      DataService.getCompletedExamIds(effectiveStudentId, currentUser.name).includes(exam.id) ||
+      DataService.getCompletedExamIds(currentUser.id, currentUser.name).includes(exam.id);
 
     if (isAlreadyDone) {
-      alert('Ujian CBT ini telah selesai Anda kerjakan dan tidak dapat diulangi kembali.');
+      alert('Soal Ujian CBT ini telah selesai Anda kerjakan dan nilai telah tercatat di sistem. Ujian tidak dapat dikerjakan ulang untuk menjaga integritas nilai.');
       return;
     }
 
@@ -602,10 +599,9 @@ export const ExamsView: React.FC = () => {
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         {exams.map((ex) => {
           const isCompleted =
-            currentUser.role === 'siswa' &&
-            (completedExamIds.includes(ex.id) ||
-              DataService.getCompletedExamIds(effectiveStudentId, currentUser.name).includes(ex.id) ||
-              DataService.getCompletedExamIds(currentUser.id, currentUser.name).includes(ex.id));
+            completedExamIds.includes(ex.id) ||
+            DataService.getCompletedExamIds(effectiveStudentId, currentUser.name).includes(ex.id) ||
+            DataService.getCompletedExamIds(currentUser.id, currentUser.name).includes(ex.id);
 
           const studentScore = isCompleted
             ? (DataService.getStudentExamScore(effectiveStudentId, ex.id, currentUser.name) ??

@@ -5,12 +5,13 @@ import {defineConfig} from 'vite';
 
 export default defineConfig(() => {
   return {
-    // Tambahkan baris ini untuk GitHub Pages
-    base: '/SchoolSphere/', 
+    // Base relatif './' memastikan aset (JS, CSS, gambar) dimuat dengan benar
+    // di GitHub Pages subfolder (/SchoolSphere/), Vercel, maupun root domain hosting
+    base: './', 
     plugins: [react(), tailwindcss()],
     resolve: {
       alias: {
-        '@': path.resolve(__dirname, '.'),
+        '@': path.resolve('.'),
       },
     },
     server: {

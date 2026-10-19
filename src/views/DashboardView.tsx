@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { DataService } from '../services/dataService';
 import { Student, Teacher, ClassRoom, ScheduleItem } from '../types';
@@ -24,11 +24,271 @@ import {
   Edit2,
   X,
   Sliders,
+  Activity,
+  RefreshCw,
+  Laptop,
 } from 'lucide-react';
 
 interface DashboardViewProps {
   onNavigate: (tab: string) => void;
 }
+
+const RecentActivitiesSection: React.FC<{ onNavigate: (tab: string) => void }> = ({ onNavigate }) => {
+  const [filterCategory, setFilterCategory] = useState<'semua' | 'nilai_cbt' | 'pengumuman' | 'presensi_jurnal' | 'sistem'>('semua');
+  const [isExpanded, setIsExpanded] = useState(false);
+  const [refreshKey, setRefreshKey] = useState(0);
+
+  const activities = useMemo(() => {
+    const list: Array<{
+      id: string;
+      category: 'nilai_cbt' | 'pengumuman' | 'presensi_jurnal' | 'sistem';
+      title: string;
+      description: string;
+      actor: string;
+      roleBadge: string;
+      timestamp: string;
+      targetTab: string;
+      badgeText: string;
+      badgeColor: string;
+    }> = [];
+
+    // 1. CBT Exam submissions
+    try {
+      const examSubs = DataService.getExamSubmissions();
+      examSubs.forEach((sub) => {
+        list.push({
+          id: 'act-cbt-' + sub.id,
+          category: 'nilai_cbt',
+          title: 'Hasil Ujian CBT Telah Selesai Dikerjakan',
+          description: `Siswa ${sub.studentName} telah menyelesaikan paket ujian dengan skor ${sub.score}. Berkas jawaban tersimpan di sistem.`,
+          actor: sub.studentName,
+          roleBadge: 'Siswa',
+          timestamp: sub.completedAt || 'Hari ini',
+          targetTab: 'exams',
+          badgeText: 'Ujian CBT',
+          badgeColor: 'bg-emerald-50 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300 border-emerald-200 dark:border-emerald-800',
+        });
+      });
+    } catch {}
+
+    // 2. Assignment submissions & grades
+    try {
+      const subs = DataService.getSubmissions();
+      subs.slice(0, 8).forEach((sub) => {
+        list.push({
+          id: 'act-sub-' + sub.id,
+          category: 'nilai_cbt',
+          title: sub.score ? 'Nilai Tugas Telah Diberikan Guru' : 'Pengumpulan Tugas Mandiri Siswa',
+          description: `${sub.studentName} mengumpulkan tugas ${sub.fileName || ''} ${sub.score ? `— Nilai: ${sub.score} (${sub.feedback || 'Tuntas'})` : '— Menunggu pemeriksaan guru'}.`,
+          actor: sub.studentName,
+          roleBadge: 'Penilaian',
+          timestamp: sub.submittedAt || 'Hari ini',
+          targetTab: 'assignments',
+          badgeText: 'Tugas & Nilai',
+          badgeColor: 'bg-indigo-50 text-indigo-700 dark:bg-indigo-950/60 dark:text-indigo-300 border-indigo-200 dark:border-indigo-800',
+        });
+      });
+    } catch {}
+
+    // 3. Announcements
+    try {
+      const ann = DataService.getAnnouncements();
+      ann.forEach((a) => {
+        list.push({
+          id: 'act-ann-' + a.id,
+          category: 'pengumuman',
+          title: a.title,
+          description: a.content.length > 110 ? a.content.substring(0, 110) + '...' : a.content,
+          actor: a.authorName,
+          roleBadge: 'Sekolah',
+          timestamp: a.date,
+          targetTab: 'announcements',
+          badgeText: a.priority || 'Pengumuman',
+          badgeColor: 'bg-blue-50 text-blue-700 dark:bg-blue-950/60 dark:text-blue-300 border-blue-200 dark:border-blue-800',
+        });
+      });
+    } catch {}
+
+    // 4. Teaching Journals & Attendance
+    try {
+      const journals = DataService.getJournals();
+      journals.slice(0, 6).forEach((j) => {
+        list.push({
+          id: 'act-jrn-' + j.id,
+          category: 'presensi_jurnal',
+          title: `Jurnal Guru: ${j.subjectName} (${j.className})`,
+          description: `Materi: "${j.topic}". Presensi: ${j.attendanceCount?.hadir ?? 0} Hadir, ${j.attendanceCount?.sakit ?? 0} Sakit, ${j.attendanceCount?.alpa ?? 0} Alfa.`,
+          actor: j.teacherName,
+          roleBadge: 'Guru',
+          timestamp: j.date,
+          targetTab: 'teaching_journals',
+          badgeText: 'Jurnal Belajar',
+          badgeColor: 'bg-amber-50 text-amber-700 dark:bg-amber-950/60 dark:text-amber-300 border-amber-200 dark:border-amber-800',
+        });
+      });
+    } catch {}
+
+    // 5. System Action Audit Logs
+    try {
+      const logs = DataService.getAuditLogs();
+      logs.slice(0, 10).forEach((l) => {
+        let tab = 'dashboard';
+        const modLower = l.module.toLowerCase();
+        if (modLower.includes('nilai') || modLower.includes('tugas')) tab = 'assignments';
+        else if (modLower.includes('ujian') || modLower.includes('cbt')) tab = 'exams';
+        else if (modLower.includes('presensi') || modLower.includes('kehadiran')) tab = 'attendance';
+        else if (modLower.includes('siswa')) tab = 'students';
+        else if (modLower.includes('guru')) tab = 'teachers';
+        else if (modLower.includes('jadwal')) tab = 'schedule';
+        else if (modLower.includes('profil') || modLower.includes('kop') || modLower.includes('pengaturan')) tab = 'settings';
+
+        list.push({
+          id: 'act-log-' + l.id,
+          category: 'sistem',
+          title: `Aktivitas Modul: ${l.module}`,
+          description: l.details,
+          actor: l.userName,
+          roleBadge: l.role.replace('_', ' ').toUpperCase(),
+          timestamp: l.timestamp,
+          targetTab: tab,
+          badgeText: l.action,
+          badgeColor: 'bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300 border-slate-200 dark:border-slate-700',
+        });
+      });
+    } catch {}
+
+    return list.sort((a, b) => b.timestamp.localeCompare(a.timestamp));
+  }, [refreshKey]);
+
+  const filtered = filterCategory === 'semua'
+    ? activities
+    : activities.filter((a) => a.category === filterCategory);
+
+  const displayed = isExpanded ? filtered : filtered.slice(0, 5);
+
+  return (
+    <div className="p-5 sm:p-6 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-2xs space-y-4">
+      {/* Header Aktivitas Terbaru */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-slate-100 dark:border-slate-800">
+        <div className="flex items-center gap-2.5">
+          <div className="p-2 rounded-xl bg-indigo-50 dark:bg-indigo-950 text-indigo-600 dark:text-indigo-400">
+            <Activity className="w-5 h-5" />
+          </div>
+          <div>
+            <h3 className="font-bold text-sm text-slate-900 dark:text-white flex items-center gap-2">
+              <span>Aktivitas & Log Operasional Terbaru</span>
+              <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-indigo-50 text-indigo-700 dark:bg-indigo-950 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800">
+                {activities.length} Tercatat
+              </span>
+            </h3>
+            <p className="text-xs text-slate-500 mt-0.5">
+              Gambaran cepat mengenai nilai ujian baru, pengumuman sekolah, jurnal mengajar, dan aksi pengguna terkini.
+            </p>
+          </div>
+        </div>
+
+        <div className="flex items-center gap-2 self-start sm:self-auto">
+          <button
+            type="button"
+            onClick={() => setRefreshKey((k) => k + 1)}
+            className="p-1.5 rounded-lg border border-slate-200 dark:border-slate-700 text-slate-500 hover:text-indigo-600 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors cursor-pointer"
+            title="Segarkan Log Aktivitas"
+          >
+            <RefreshCw className="w-3.5 h-3.5" />
+          </button>
+        </div>
+      </div>
+
+      {/* Filter Kategori */}
+      <div className="flex items-center gap-1.5 overflow-x-auto pb-1 text-xs">
+        {[
+          { key: 'semua', label: 'Semua Aktivitas' },
+          { key: 'nilai_cbt', label: 'Nilai & CBT' },
+          { key: 'pengumuman', label: 'Pengumuman' },
+          { key: 'presensi_jurnal', label: 'Jurnal & Presensi' },
+          { key: 'sistem', label: 'Aktivitas Sistem' },
+        ].map((f) => (
+          <button
+            key={f.key}
+            type="button"
+            onClick={() => setFilterCategory(f.key as any)}
+            className={`px-3 py-1.5 rounded-lg font-semibold whitespace-nowrap transition-colors cursor-pointer text-xs ${
+              filterCategory === f.key
+                ? 'bg-indigo-600 text-white shadow-2xs'
+                : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-700'
+            }`}
+          >
+            {f.label}
+          </button>
+        ))}
+      </div>
+
+      {/* Daftar Item Aktivitas */}
+      {displayed.length === 0 ? (
+        <div className="p-8 text-center border border-dashed border-slate-200 dark:border-slate-800 rounded-xl text-slate-400 text-xs">
+          Belum ada aktivitas pada kategori ini.
+        </div>
+      ) : (
+        <div className="space-y-2.5">
+          {displayed.map((item) => (
+            <div
+              key={item.id}
+              className="p-3 sm:p-3.5 rounded-xl border border-slate-100 dark:border-slate-800 bg-slate-50/60 dark:bg-slate-850/50 hover:bg-indigo-50/40 dark:hover:bg-indigo-950/20 transition-all flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs"
+            >
+              <div className="space-y-1 flex-1">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <span className={`px-2 py-0.5 rounded text-[10px] font-bold border ${item.badgeColor}`}>
+                    {item.badgeText}
+                  </span>
+                  <span className="font-bold text-slate-900 dark:text-white">
+                    {item.title}
+                  </span>
+                  <span className="text-[10px] text-slate-400 font-mono">
+                    · {item.timestamp}
+                  </span>
+                </div>
+                <p className="text-[11px] text-slate-600 dark:text-slate-300 leading-relaxed">
+                  {item.description}
+                </p>
+                <div className="flex items-center gap-1.5 text-[10px] text-slate-500">
+                  <span className="font-semibold text-slate-700 dark:text-slate-300">{item.actor}</span>
+                  <span className="px-1.5 py-0.2 rounded bg-slate-200 dark:bg-slate-800 font-medium">
+                    {item.roleBadge}
+                  </span>
+                </div>
+              </div>
+
+              <div className="shrink-0 self-end sm:self-auto">
+                <button
+                  type="button"
+                  onClick={() => onNavigate(item.targetTab)}
+                  className="inline-flex items-center gap-1 px-3 py-1.5 text-[11px] font-bold rounded-lg bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-indigo-600 dark:text-indigo-400 hover:bg-indigo-50 dark:hover:bg-indigo-950/50 transition-colors cursor-pointer shadow-2xs"
+                >
+                  <span>Buka Modul</span>
+                  <ArrowRight className="w-3 h-3" />
+                </button>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Toggle Selengkapnya */}
+      {filtered.length > 5 && (
+        <div className="pt-2 flex justify-center border-t border-slate-100 dark:border-slate-800">
+          <button
+            type="button"
+            onClick={() => setIsExpanded(!isExpanded)}
+            className="text-xs font-semibold text-indigo-600 dark:text-indigo-400 hover:underline cursor-pointer flex items-center gap-1"
+          >
+            <span>{isExpanded ? 'Tampilkan Lebih Sedikit' : `Lihat Semua Aktivitas (${filtered.length})`}</span>
+            <ArrowRight className={`w-3.5 h-3.5 transition-transform ${isExpanded ? '-rotate-90' : 'rotate-90'}`} />
+          </button>
+        </div>
+      )}
+    </div>
+  );
+};
 
 export const DashboardView: React.FC<DashboardViewProps> = ({ onNavigate }) => {
   const { currentUser, roleInfo, activeChildId, setActiveChildId } = useAuth();
@@ -110,6 +370,9 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ onNavigate }) => {
         {/* Subtle background glow */}
         <div className="absolute right-0 top-0 -mt-10 -mr-10 w-64 h-64 bg-indigo-500/10 rounded-full blur-3xl pointer-events-none"></div>
       </div>
+
+      {/* Komponen Aktivitas Terbaru (Requirement 5) */}
+      <RecentActivitiesSection onNavigate={onNavigate} />
 
       {/* Role-Specific Content */}
 

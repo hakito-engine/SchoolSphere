@@ -43,7 +43,7 @@ export const SchoolSettingsView: React.FC = () => {
   const [academicYears, setAcademicYears] = useState<AcademicYearConfig[]>(() => DataService.getAcademicYears());
   const [auditLogs, setAuditLogs] = useState<AuditLog[]>(() => DataService.getAuditLogs());
 
-  const [activeTab, setActiveTab] = useState<'profil' | 'admin_account' | 'kop_surat' | 'tahun_ajaran' | 'tanggal_dokumen' | 'database_mysql' | 'instalasi_web' | 'backup' | 'audit'>('profil');
+  const [activeTab, setActiveTab] = useState<'profil' | 'admin_account' | 'kop_surat' | 'nomor_surat' | 'tahun_ajaran' | 'tanggal_dokumen' | 'database_mysql' | 'instalasi_web' | 'backup' | 'audit'>('profil');
   const [saveSuccess, setSaveSuccess] = useState(false);
   const [saveMessage, setSaveMessage] = useState('Pengaturan berhasil disimpan dan diperbarui di seluruh dokumen cetak.');
 
@@ -399,8 +399,22 @@ def health():
               : 'text-slate-500 hover:text-slate-700'
           }`}
         >
+          <Building className="w-3.5 h-3.5 text-indigo-600" />
+          <span>Kop Surat & Logo</span>
+        </button>
+        <button
+          onClick={() => setActiveTab('nomor_surat')}
+          className={`pb-2.5 px-3 transition-colors whitespace-nowrap cursor-pointer flex items-center gap-1.5 ${
+            activeTab === 'nomor_surat'
+              ? 'border-b-2 border-indigo-600 text-indigo-600 dark:text-indigo-400 font-bold'
+              : 'text-slate-500 hover:text-slate-700'
+          }`}
+        >
           <FileText className="w-3.5 h-3.5 text-indigo-600" />
-          <span>Kop & Nomor Surat Resmi</span>
+          <span>Pengaturan Nomor Surat</span>
+          <span className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-indigo-100 text-indigo-800 dark:bg-indigo-950 dark:text-indigo-300">
+            Terintegrasi
+          </span>
         </button>
         <button
           onClick={() => setActiveTab('tahun_ajaran')}
@@ -1187,6 +1201,202 @@ def health():
         </div>
       )}
 
+      {/* TAB: PENGATURAN NOMOR SURAT RESMI (Requirement 1) */}
+      {activeTab === 'nomor_surat' && (
+        <div className="space-y-6">
+          <form onSubmit={handleSaveProfile} className="p-6 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 space-y-5 text-xs">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-slate-100 dark:border-slate-800">
+              <div>
+                <h3 className="font-bold text-sm text-slate-900 dark:text-white flex items-center gap-2">
+                  <FileText className="w-4 h-4 text-indigo-600" />
+                  Konfigurasi Format & Kode Penomoran Surat Kedinasan
+                </h3>
+                <p className="text-slate-500 text-xs mt-0.5">
+                  Pengaturan ini terintegrasi langsung ke seluruh dokumen cetak resmi sekolah (Ujian CBT, Presensi, Rapor, Surat Aktif, Jadwal, dan BK).
+                </p>
+              </div>
+              <button
+                type="submit"
+                className="flex items-center gap-1.5 px-4 py-2 text-xs font-semibold rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white cursor-pointer shadow-xs transition-colors self-start sm:self-auto"
+              >
+                <Save className="w-4 h-4" />
+                <span>Simpan Format Nomor Surat</span>
+              </button>
+            </div>
+
+            {/* Template Presets */}
+            <div className="space-y-2">
+              <label className="block text-slate-700 dark:text-slate-300 font-bold">
+                Pilih Preset Format Populer:
+              </label>
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2">
+                {[
+                  {
+                    name: 'Standar Kemendikbud',
+                    format: '{KLASIFIKASI} / {NO} / {SEKOLAH} / {BULAN} / {TAHUN}',
+                    desc: 'Otomatis ganti kode 421.1 s/d 421.8 per dokumen',
+                  },
+                  {
+                    name: 'Format SMAN Resmi',
+                    format: '421.3 / {NO} / SMAN1 / {BULAN} / {TAHUN}',
+                    desc: 'Format umum SMA Negeri dengan akronim sekolah',
+                  },
+                  {
+                    name: 'Format Sekolah Swasta / Yayasan',
+                    format: '005 / YAY / {NO} / {BULAN} / {TAHUN}',
+                    desc: 'Penomoran berdasar kode yayasan',
+                  },
+                  {
+                    name: 'Format Ringkas & Nomor Urut',
+                    format: '{NO} / {SEKOLAH} / {BULAN} / {TAHUN}',
+                    desc: 'Penomoran sederhana tanpa kode klasifikasi',
+                  },
+                ].map((preset) => (
+                  <button
+                    key={preset.name}
+                    type="button"
+                    onClick={() => handleProfileChange('officialLetterNumberFormat', preset.format)}
+                    className={`p-3 rounded-xl border text-left transition-all cursor-pointer ${
+                      (profile.officialLetterNumberFormat || '').trim() === preset.format
+                        ? 'border-indigo-600 bg-indigo-50/70 dark:bg-indigo-950/40 text-indigo-950 dark:text-indigo-200 ring-2 ring-indigo-500/20'
+                        : 'border-slate-200 dark:border-slate-700 hover:border-slate-300 dark:hover:border-slate-600 bg-white dark:bg-slate-850'
+                    }`}
+                  >
+                    <div className="font-bold text-xs">{preset.name}</div>
+                    <code className="text-[10px] text-indigo-600 dark:text-indigo-400 block font-mono mt-1 break-all">
+                      {preset.format}
+                    </code>
+                    <p className="text-[10px] text-slate-500 mt-1">{preset.desc}</p>
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Input Form Pola Format */}
+            <div className="p-4 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 space-y-3">
+              <label className="block text-slate-800 dark:text-slate-200 font-bold">
+                Pola / Rumus Nomor Surat Aktif:
+              </label>
+              <input
+                type="text"
+                value={profile.officialLetterNumberFormat || '421.3 / {nomor} / SMA-NU / {bulan} / {tahun}'}
+                onChange={(e) => handleProfileChange('officialLetterNumberFormat', e.target.value)}
+                placeholder="Contoh: {KLASIFIKASI} / {NO} / {SEKOLAH} / {BULAN} / {TAHUN}"
+                className="w-full px-3.5 py-2.5 rounded-lg border border-indigo-300 dark:border-indigo-700 bg-white dark:bg-slate-900 text-slate-900 dark:text-white font-mono font-bold text-sm shadow-2xs"
+                required
+              />
+
+              <div className="text-[11px] text-slate-600 dark:text-slate-400 space-y-1 leading-relaxed">
+                <p className="font-semibold text-slate-700 dark:text-slate-300">Variabel Dinamis yang Didukung:</p>
+                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2 pt-1 font-mono text-[10px]">
+                  <div className="p-1.5 rounded bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700">
+                    <strong className="text-indigo-600">{'{KLASIFIKASI}'}</strong>: Kode dinas (421.1–421.8)
+                  </div>
+                  <div className="p-1.5 rounded bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700">
+                    <strong className="text-indigo-600">{'{NO}'} / {'{NOMOR}'}</strong>: Kode / Nomor dokumen
+                  </div>
+                  <div className="p-1.5 rounded bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700">
+                    <strong className="text-indigo-600">{'{BULAN}'}</strong>: Bulan romawi (I - XII)
+                  </div>
+                  <div className="p-1.5 rounded bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700">
+                    <strong className="text-indigo-600">{'{TAHUN}'}</strong>: Tahun 4 digit (2024–2026)
+                  </div>
+                  <div className="p-1.5 rounded bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700">
+                    <strong className="text-indigo-600">{'{SEKOLAH}'}</strong>: Singkatan nama sekolah
+                  </div>
+                  <div className="p-1.5 rounded bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700">
+                    <strong className="text-indigo-600">{'{NPSN}'}</strong>: Nomor Pokok Sekolah ({profile.npsn})
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Referensi Klasifikasi Surat Dinas Kemendikbud */}
+            <div className="border border-slate-200 dark:border-slate-700 rounded-xl overflow-hidden">
+              <div className="bg-slate-100 dark:bg-slate-800 px-4 py-2.5 font-bold text-xs text-slate-800 dark:text-slate-200 flex items-center justify-between">
+                <span>Daftar Kode Klasifikasi Surat Dinas Pendidikan (Standar Otomatis)</span>
+                <span className="text-[10px] text-indigo-600 dark:text-indigo-400 font-normal">Sesuai Permendikbud</span>
+              </div>
+              <div className="p-3 grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-2 text-xs">
+                {[
+                  { code: '421.1', label: 'Standar Isi / Kurikulum & Jadwal' },
+                  { code: '421.2', label: 'Ketenagaan & Tenaga Pendidik' },
+                  { code: '421.3', label: 'Kesiswaan & Surat Keterangan Aktif' },
+                  { code: '421.4', label: 'Jurnal Belajar & Rekap Wali Kelas' },
+                  { code: '421.5', label: 'Presensi & Kehadiran Peserta Didik' },
+                  { code: '421.6', label: 'Penilaian, Asesmen & Nilai Rapor' },
+                  { code: '421.7', label: 'Ujian CBT & Berita Acara Ujian' },
+                  { code: '421.8', label: 'Bimbingan & Konseling (BK)' },
+                ].map((item) => (
+                  <div key={item.code} className="p-2 rounded-lg bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700">
+                    <span className="font-mono font-bold text-indigo-600 text-[11px] block">{item.code}</span>
+                    <span className="text-[11px] text-slate-600 dark:text-slate-300">{item.label}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* Live Evaluator Multi-Document */}
+            <div className="p-4 rounded-xl bg-indigo-50/60 dark:bg-indigo-950/40 border border-indigo-200 dark:border-indigo-800 space-y-2.5">
+              <span className="text-xs font-bold text-indigo-950 dark:text-indigo-200 flex items-center gap-1.5">
+                <Sparkles className="w-4 h-4 text-indigo-600" />
+                Simulasi Hasil Nomor Surat di Seluruh Dokumen Cetak Sekolah:
+              </span>
+              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2">
+                {[
+                  { type: 'Ujian CBT', sampleCode: 'CBT / XMIPA1', classif: '421.7' },
+                  { type: 'Rekap Presensi Harian', sampleCode: 'ATT / XMIPA1', classif: '421.5' },
+                  { type: 'Surat Siswa Aktif', sampleCode: '242510001', classif: '421.3' },
+                  { type: 'Rekap Nilai / Rapor', sampleCode: 'RAPOR / XMIPA1', classif: '421.6' },
+                  { type: 'Jadwal Pelajaran', sampleCode: 'KUR / XMIPA1', classif: '421.2' },
+                  { type: 'Layanan BK Siswa', sampleCode: 'BK / XMIPA1', classif: '421.8' },
+                ].map((doc) => {
+                  const format = profile.officialLetterNumberFormat || '421.3 / {nomor} / SMA-NU / {bulan} / {tahun}';
+                  const romanMonths = ['I','II','III','IV','V','VI','VII','VIII','IX','X','XI','XII'];
+                  const month = romanMonths[new Date().getMonth()];
+                  const year = new Date().getFullYear().toString();
+                  const school = profile.name.split(/\s+/).map((w) => w[0]).join('').toUpperCase() || 'SEKOLAH';
+                  let evaluated = format
+                    .replace(/\{KLASIFIKASI\}/gi, doc.classif)
+                    .replace(/\{KLA\}/gi, doc.classif)
+                    .replace(/\{NO\}/gi, doc.sampleCode)
+                    .replace(/\{NOMOR\}/gi, doc.sampleCode)
+                    .replace(/\{KODE\}/gi, doc.sampleCode)
+                    .replace(/\{BULAN\}/gi, month)
+                    .replace(/\{TAHUN\}/gi, year)
+                    .replace(/\{SEKOLAH\}/gi, school);
+                  if (/^\d{3}(\.\d+)?\s*\//.test(evaluated) && !format.includes('{KLASIFIKASI}')) {
+                    evaluated = evaluated.replace(/^\d{3}(\.\d+)?/, doc.classif);
+                  }
+
+                  return (
+                    <div key={doc.type} className="p-2.5 rounded-lg bg-white dark:bg-slate-900 border border-indigo-200 dark:border-indigo-800 text-[11px]">
+                      <div className="flex items-center justify-between text-slate-500 font-semibold mb-1">
+                        <span>{doc.type}</span>
+                        <span className="font-mono text-[10px] text-indigo-500">[{doc.classif}]</span>
+                      </div>
+                      <p className="font-mono font-bold text-indigo-600 dark:text-indigo-400 text-xs break-all">
+                        {evaluated}
+                      </p>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+
+            <div className="flex justify-end pt-3 border-t border-slate-100 dark:border-slate-800">
+              <button
+                type="submit"
+                className="flex items-center gap-2 px-5 py-2.5 text-xs font-semibold rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white cursor-pointer shadow-xs"
+              >
+                <Save className="w-4 h-4" />
+                <span>Simpan dan Terapkan ke Dokumen</span>
+              </button>
+            </div>
+          </form>
+        </div>
+      )}
+
       {/* TAB 3: TAHUN AJARAN & SINKRONISASI DATA (Super Admin) */}
       {activeTab === 'tahun_ajaran' && (
         <div className="space-y-6">
@@ -1679,6 +1889,53 @@ def health():
                 <Download className="w-4 h-4" />
                 <span>Unduh File Panduan (.md)</span>
               </button>
+            </div>
+          </div>
+
+          {/* Kartu Khusus: Solusi Deployment GitHub Pages (Mengatasi Layar Putih & 404 src/main.tsx) */}
+          <div className="p-5 rounded-2xl bg-amber-500/10 border-2 border-amber-500/30 text-amber-950 dark:text-amber-100 space-y-3">
+            <div className="flex items-center gap-2">
+              <span className="p-1.5 rounded-lg bg-amber-500 text-white font-bold text-xs">SOLUSI RESMI</span>
+              <h4 className="font-bold text-sm text-amber-900 dark:text-amber-200">
+                Cara Mengatasi Layar Putih (Blank Screen) saat Deploy ke GitHub Pages
+              </h4>
+            </div>
+
+            <div className="text-xs text-amber-900 dark:text-amber-200/90 space-y-2 leading-relaxed">
+              <p>
+                <strong>Penyebab Layar Putih & Galat <code>404 src/main.tsx</code>:</strong><br />
+                Secara bawaan, GitHub Pages menyajikan berkas mentah dari branch <code>main / (root)</code>. Berkas <code>index.html</code> di root memanggil file TypeScript mentah <code>/src/main.tsx</code> yang tidak dapat dieksekusi langsung oleh browser tanpa dikompilasi oleh Vite terlebih dahulu.
+              </p>
+
+              <div className="p-3 rounded-xl bg-white dark:bg-slate-900 border border-amber-300 dark:border-amber-800/80 space-y-2 text-slate-800 dark:text-slate-200">
+                <span className="font-bold text-xs text-indigo-600 dark:text-indigo-400 block">
+                  Langkah Mudah Deploy Otomatis Menggunakan GitHub Actions (Disarankan):
+                </span>
+                <ol className="list-decimal list-inside space-y-1 text-xs">
+                  <li>
+                    Buka repositori GitHub Anda di browser (misal: <code>https://github.com/username/SchoolSphere</code>).
+                  </li>
+                  <li>
+                    Klik tab <strong>Settings</strong> di menu atas repositori.
+                  </li>
+                  <li>
+                    Pilih menu <strong>Pages</strong> di bilah navigasi samping kiri.
+                  </li>
+                  <li>
+                    Pada bagian <strong>Build and deployment &gt; Source</strong>, ubah dari <em>"Deploy from a branch"</em> menjadi <strong>"GitHub Actions"</strong>.
+                  </li>
+                  <li>
+                    Selesai! Berkas alur kerja otomatis <code>.github/workflows/deploy.yml</code> yang telah kami buat akan otomatis mengompilasi Vite dan mempublikasikan folder <code>dist/</code> ke GitHub Pages setiap kali Anda melakukan push.
+                  </li>
+                </ol>
+              </div>
+
+              <div className="flex items-center gap-2 pt-1 text-[11px] text-amber-800 dark:text-amber-300">
+                <span>✓ Konfigurasi <code>base: './'</code> di <code>vite.config.ts</code> sudah aktif (kompatibel untuk subfolder maupun domain kustom).</span>
+              </div>
+              <div className="flex items-center gap-2 text-[11px] text-amber-800 dark:text-amber-300">
+                <span>✓ Berkas <code>public/404.html</code> dan <code>public/favicon.ico</code> sudah ditambahkan agar refresh halaman tidak galat 404.</span>
+              </div>
             </div>
           </div>
 
