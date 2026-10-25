@@ -73,11 +73,11 @@ export const Navbar: React.FC<NavbarProps> = ({
           />
           <div>
             <div className="flex items-center gap-2">
-              <span className="font-bold text-sm tracking-tight text-slate-900 dark:text-white whitespace-nowrap">
-                SchoolSphere <span className="text-indigo-600 dark:text-indigo-400">PRO</span>
+              <span className="font-extrabold text-sm tracking-tight text-slate-900 dark:text-white whitespace-nowrap">
+                SISPAM <span className="text-indigo-600 dark:text-indigo-400">PRO</span>
               </span>
-              <span className="text-[10px] font-mono text-slate-500 dark:text-slate-400 hidden lg:inline">
-                by Hakito Engine
+              <span className="text-[10px] text-slate-500 dark:text-slate-400 hidden xl:inline">
+                · Sistem Integrasi Sekolah, Pembelajaran, & Administrasi
               </span>
             </div>
             <p className="text-[11px] text-slate-500 dark:text-slate-400 truncate max-w-[200px] sm:max-w-xs">

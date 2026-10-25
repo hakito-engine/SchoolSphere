@@ -16,6 +16,7 @@ import {
   EyeOff,
   Edit2,
   Trash2,
+  Link as LinkIcon,
 } from 'lucide-react';
 
 export const LearningModulesView: React.FC = () => {
@@ -99,6 +100,40 @@ export const LearningModulesView: React.FC = () => {
     setEditingModule(mod);
     setFormData({ ...mod });
     setIsModalOpen(true);
+  };
+
+  const handleAddMaterial = () => {
+    const currentMaterials = formData.materials || [];
+    const newMat: LearningMaterial = {
+      id: 'mat-' + Date.now(),
+      title: 'Bahan Ajar & Modul Kurikulum Merdeka',
+      type: 'document',
+      fileUrl: 'https://drive.google.com/',
+      description: 'Dokumen modul ajar dan referensi materi.',
+      durationOrPages: '10 Halaman',
+    };
+    setFormData({
+      ...formData,
+      materials: [...currentMaterials, newMat],
+    });
+  };
+
+  const handleRemoveMaterial = (matId: string) => {
+    const currentMaterials = formData.materials || [];
+    setFormData({
+      ...formData,
+      materials: currentMaterials.filter((m) => m.id !== matId),
+    });
+  };
+
+  const handleUpdateMaterial = (matId: string, field: keyof LearningMaterial, value: string) => {
+    const currentMaterials = formData.materials || [];
+    setFormData({
+      ...formData,
+      materials: currentMaterials.map((m) =>
+        m.id === matId ? { ...m, [field]: value } : m
+      ),
+    });
   };
 
   const handleDeleteModule = (id: string, title: string) => {
@@ -335,8 +370,16 @@ export const LearningModulesView: React.FC = () => {
 
               {/* Materi dan Media */}
               <div>
-                <p className="text-[11px] font-bold text-slate-400 uppercase tracking-wide mb-2">
-                  Bahan Ajar & Dokumen Referensi ({mod.materials.length})
+                <p className="text-[11px] font-bold text-slate-400 uppercase tracking-wide mb-2 flex items-center justify-between">
+                  <span>Bahan Ajar & Dokumen Referensi ({mod.materials.length})</span>
+                  {canManageModules && (
+                    <button
+                      onClick={() => handleOpenEdit(mod)}
+                      className="text-[10px] text-indigo-600 hover:text-indigo-800 dark:text-indigo-400 font-semibold cursor-pointer flex items-center gap-1"
+                    >
+                      <Plus className="w-3 h-3" /> Tambah Bahan Ajar
+                    </button>
+                  )}
                 </p>
                 <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
                   {mod.materials.map((mat) => (
@@ -358,11 +401,20 @@ export const LearningModulesView: React.FC = () => {
                         <p className="text-[11px] text-slate-500 line-clamp-1 mt-0.5">
                           {mat.description}
                         </p>
-                        <div className="flex items-center justify-between mt-1 text-[10px] text-slate-400 font-mono">
+                        <div className="flex items-center justify-between mt-2 pt-1 border-t border-slate-100 dark:border-slate-800 text-[10px] text-slate-400 font-mono">
                           <span>{mat.durationOrPages}</span>
-                          <span className="text-indigo-600 font-semibold cursor-pointer hover:underline flex items-center gap-0.5">
-                            Buka <ExternalLink className="w-3 h-3" />
-                          </span>
+                          {mat.fileUrl ? (
+                            <a
+                              href={mat.fileUrl}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="text-indigo-600 font-semibold hover:underline flex items-center gap-0.5"
+                            >
+                              Buka Link <ExternalLink className="w-3 h-3" />
+                            </a>
+                          ) : (
+                            <span className="text-slate-400">Tersedia di Kelas</span>
+                          )}
                         </div>
                       </div>
                     </div>
@@ -379,14 +431,14 @@ export const LearningModulesView: React.FC = () => {
         )}
       </div>
 
-      {/* Modal Tambah Modul */}
+      {/* Modal Tambah / Edit Modul & Bahan Ajar */}
       {isModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-          <div className="bg-white dark:bg-slate-900 rounded-xl max-w-lg w-full p-6 border border-slate-200 dark:border-slate-800 shadow-xl">
+          <div className="bg-white dark:bg-slate-900 rounded-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto p-6 border border-slate-200 dark:border-slate-800 shadow-xl">
             <h3 className="text-sm font-bold text-slate-900 dark:text-white mb-4">
-              {editingModule ? 'Edit Modul Pembelajaran' : 'Buat Modul Pembelajaran Baru'}
+              {editingModule ? 'Edit Modul & Bahan Ajar Pembelajaran' : 'Buat Modul & Bahan Ajar Baru'}
             </h3>
-            <form onSubmit={handleSave} className="space-y-3 text-xs">
+            <form onSubmit={handleSave} className="space-y-4 text-xs">
               <div>
                 <label className="block text-slate-600 dark:text-slate-400 font-medium mb-1">
                   Judul Modul / Bab
@@ -441,13 +493,129 @@ export const LearningModulesView: React.FC = () => {
                   Deskripsi / Pengantar Modul
                 </label>
                 <textarea
-                  rows={3}
+                  rows={2}
                   required
                   placeholder="Ringkasan konsep pokok yang akan dipelajari..."
                   value={formData.description || ''}
                   onChange={(e) => setFormData({ ...formData, description: e.target.value })}
                   className="w-full px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white"
                 ></textarea>
+              </div>
+
+              {/* Form Bahan Ajar & Dokumen Referensi (Upload Link Modul Ajar) */}
+              <div className="p-3.5 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700/80 space-y-3">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <h4 className="text-xs font-bold text-slate-900 dark:text-white flex items-center gap-1.5">
+                      <LinkIcon className="w-3.5 h-3.5 text-indigo-600" />
+                      <span>Form Bahan Ajar & Dokumen Referensi (Upload Link Modul Ajar)</span>
+                    </h4>
+                    <p className="text-[11px] text-slate-500">
+                      Tautkan link Google Drive, Canva, PDF, atau dokumen bahan ajar untuk dipelajari peserta didik.
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={handleAddMaterial}
+                    className="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-indigo-50 dark:bg-indigo-950 text-indigo-600 dark:text-indigo-400 hover:bg-indigo-100 font-semibold text-xs border border-indigo-200 dark:border-indigo-800 cursor-pointer"
+                  >
+                    <Plus className="w-3.5 h-3.5" />
+                    <span>Tambah Link Materi</span>
+                  </button>
+                </div>
+
+                <div className="space-y-3">
+                  {(formData.materials || []).map((mat, idx) => (
+                    <div
+                      key={mat.id || idx}
+                      className="p-3 rounded-lg bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 space-y-2 relative"
+                    >
+                      <div className="flex items-center justify-between">
+                        <span className="text-[11px] font-bold text-indigo-600 uppercase tracking-wide">
+                          Dokumen #{idx + 1}
+                        </span>
+                        {(formData.materials || []).length > 1 && (
+                          <button
+                            type="button"
+                            onClick={() => handleRemoveMaterial(mat.id)}
+                            className="text-rose-500 hover:text-rose-700 p-1 cursor-pointer"
+                            title="Hapus Bahan Ajar Ini"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        )}
+                      </div>
+
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                        <div>
+                          <label className="block text-[11px] text-slate-500 mb-0.5">Judul Bahan Ajar</label>
+                          <input
+                            type="text"
+                            required
+                            placeholder="Contoh: Modul Ajar Kurikulum Merdeka Pertemuan 1"
+                            value={mat.title}
+                            onChange={(e) => handleUpdateMaterial(mat.id, 'title', e.target.value)}
+                            className="w-full px-2.5 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white"
+                          />
+                        </div>
+
+                        <div>
+                          <label className="block text-[11px] text-slate-500 mb-0.5">Tipe Materi</label>
+                          <select
+                            value={mat.type}
+                            onChange={(e) => handleUpdateMaterial(mat.id, 'type', e.target.value as any)}
+                            className="w-full px-2.5 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white cursor-pointer"
+                          >
+                            <option value="document">Dokumen PDF / Modul Ajar</option>
+                            <option value="slide">Slide Presentasi (PPT/Canva)</option>
+                            <option value="video">Video Pembelajaran</option>
+                            <option value="article">Artikel / Laman Referensi</option>
+                          </select>
+                        </div>
+                      </div>
+
+                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                        <div className="sm:col-span-2">
+                          <label className="block text-[11px] text-slate-500 mb-0.5 flex items-center justify-between">
+                            <span>Upload / Tautan Link Berkas (Google Drive / Modul Ajar)</span>
+                          </label>
+                          <div className="relative">
+                            <input
+                              type="url"
+                              placeholder="https://drive.google.com/file/d/... atau tautan file modul"
+                              value={mat.fileUrl || ''}
+                              onChange={(e) => handleUpdateMaterial(mat.id, 'fileUrl', e.target.value)}
+                              className="w-full px-2.5 py-1.5 pl-7 rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white font-mono text-[11px]"
+                            />
+                            <LinkIcon className="w-3.5 h-3.5 text-slate-400 absolute left-2 top-2" />
+                          </div>
+                        </div>
+
+                        <div>
+                          <label className="block text-[11px] text-slate-500 mb-0.5">Halaman / Durasi</label>
+                          <input
+                            type="text"
+                            placeholder="Contoh: 15 Halaman"
+                            value={mat.durationOrPages || ''}
+                            onChange={(e) => handleUpdateMaterial(mat.id, 'durationOrPages', e.target.value)}
+                            className="w-full px-2.5 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white"
+                          />
+                        </div>
+                      </div>
+
+                      <div>
+                        <label className="block text-[11px] text-slate-500 mb-0.5">Deskripsi Singkat Bahan Ajar</label>
+                        <input
+                          type="text"
+                          placeholder="Catatan petunjuk isi materi untuk siswa..."
+                          value={mat.description}
+                          onChange={(e) => handleUpdateMaterial(mat.id, 'description', e.target.value)}
+                          className="w-full px-2.5 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white text-[11px]"
+                        />
+                      </div>
+                    </div>
+                  ))}
+                </div>
               </div>
 
               <div className="flex items-center justify-end gap-2 pt-3 border-t border-slate-100 dark:border-slate-800">

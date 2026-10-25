@@ -22,6 +22,7 @@ import { ParentPortalView } from './views/ParentPortalView';
 import { AnalyticsView } from './views/AnalyticsView';
 import { AnnouncementsView } from './views/AnnouncementsView';
 import { SchoolSettingsView } from './views/SchoolSettingsView';
+import { HomeroomReportView } from './views/HomeroomReportView';
 import { LoginView } from './views/LoginView';
 
 const AuthenticatedApp: React.FC = () => {
@@ -108,6 +109,8 @@ const AuthenticatedApp: React.FC = () => {
         return <TeachingJournalsView />;
       case 'assignments':
         return <AssignmentsView />;
+      case 'homeroom_reports':
+        return <HomeroomReportView />;
       case 'exams':
         return <ExamsView />;
       case 'users':
@@ -155,11 +158,11 @@ const AuthenticatedApp: React.FC = () => {
 
         {/* Quiet Footer */}
         <footer className="no-print border-t border-slate-200 dark:border-slate-800 py-4 px-6 text-center text-[11px] text-slate-500 flex flex-col sm:flex-row items-center justify-between gap-2">
-          <span>
-            SchoolSphere PRO by Hakito Engine · Terintegrasi Kurikulum Merdeka
+          <span className="font-medium text-slate-700 dark:text-slate-300">
+            SISPAM by Hakito Engine · Sistem Integrasi Sekolah, Pembelajaran, & Administrasi
           </span>
-          <span className="font-mono text-slate-400">
-            Arsitektur Modular Standar GAS-Ready · Autentikasi RBAC 8 Peran
+          <span className="text-slate-500">
+            Terintegrasi Standar Kurikulum Merdeka
           </span>
         </footer>
       </div>

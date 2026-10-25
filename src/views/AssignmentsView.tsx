@@ -21,6 +21,8 @@ import {
   Check,
   X,
   RotateCcw,
+  Link as LinkIcon,
+  ExternalLink,
 } from 'lucide-react';
 
 export const AssignmentsView: React.FC = () => {
@@ -87,6 +89,8 @@ export const AssignmentsView: React.FC = () => {
     deadline: '2024-10-25 23:59',
     maxScore: 100,
     rubricNotes: 'Ketepatan konsep, kelengkapan aljabar, dan kerapian tulisan.',
+    questionFileLink: '',
+    questionLinkTitle: '',
   });
 
   const handleOpenAdd = () => {
@@ -99,13 +103,19 @@ export const AssignmentsView: React.FC = () => {
       deadline: '2024-10-30 23:59',
       maxScore: 100,
       rubricNotes: 'Ketepatan konsep, kelengkapan aljabar, dan kerapian tulisan.',
+      questionFileLink: '',
+      questionLinkTitle: '',
     });
     setIsAddModalOpen(true);
   };
 
   const handleOpenEdit = (asg: Assignment) => {
     setEditingAssignment(asg);
-    setNewAsgData({ ...asg });
+    setNewAsgData({
+      ...asg,
+      questionFileLink: asg.questionFileLink || '',
+      questionLinkTitle: asg.questionLinkTitle || '',
+    });
     setIsAddModalOpen(true);
   };
 
@@ -131,6 +141,7 @@ export const AssignmentsView: React.FC = () => {
 
   // Modal: Student Submission form
   const [studentAnswerText, setStudentAnswerText] = useState('');
+  const [studentAnswerLink, setStudentAnswerLink] = useState('');
   const [submitSuccess, setSubmitSuccess] = useState(false);
 
   // Print Modals
@@ -164,6 +175,8 @@ export const AssignmentsView: React.FC = () => {
       submissionCount: editingAssignment ? editingAssignment.submissionCount : 0,
       published: true,
       rubricNotes: newAsgData.rubricNotes,
+      questionFileLink: newAsgData.questionFileLink?.trim() || undefined,
+      questionLinkTitle: newAsgData.questionLinkTitle?.trim() || undefined,
     };
 
     DataService.saveAssignment(payload, {
@@ -220,7 +233,7 @@ export const AssignmentsView: React.FC = () => {
 
   const handleStudentSubmitAnswer = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!studentAnswerText) return;
+    if (!studentAnswerText && !studentAnswerLink) return;
 
     const payload: AssignmentSubmission = {
       id: 'subm-' + Date.now(),
@@ -228,9 +241,10 @@ export const AssignmentsView: React.FC = () => {
       studentId: currentUser.id,
       studentName: currentUser.name,
       submittedAt: new Date().toISOString().replace('T', ' ').substring(0, 16),
-      content: studentAnswerText,
+      content: studentAnswerText || 'Mengumpulkan lembar jawaban via tautan dokumen eksternal.',
       fileName: `Lembar_Jawaban_${currentUser.name.replace(/\s+/g, '_')}.pdf`,
       status: 'pending',
+      answerLink: studentAnswerLink.trim() || undefined,
     };
 
     DataService.submitAssignmentAnswer(payload, {
@@ -241,6 +255,7 @@ export const AssignmentsView: React.FC = () => {
 
     setSubmissions(DataService.getSubmissions());
     setStudentAnswerText('');
+    setStudentAnswerLink('');
     setSubmitSuccess(true);
     setTimeout(() => setSubmitSuccess(false), 3000);
   };
@@ -494,6 +509,35 @@ export const AssignmentsView: React.FC = () => {
                     Rubrik Penilaian: {activeAssignment.rubricNotes} · Patokan Ketuntasan: Skor Minimal {currentKKM}
                   </p>
                 )}
+
+                {/* Fitur Upload Link Soal Khusus Guru Mata Pelajaran (Google Drive, Lembar Soal, PDF) */}
+                {activeAssignment.questionFileLink && (
+                  <div className="mt-3 p-3 rounded-lg bg-indigo-50/80 dark:bg-indigo-950/50 border border-indigo-200 dark:border-indigo-800 flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
+                    <div className="flex items-start gap-2.5">
+                      <div className="p-1.5 rounded-md bg-indigo-100 dark:bg-indigo-900/60 text-indigo-700 dark:text-indigo-300 shrink-0">
+                        <LinkIcon className="w-4 h-4" />
+                      </div>
+                      <div className="min-w-0">
+                        <p className="font-bold text-indigo-950 dark:text-indigo-200 text-xs flex items-center gap-1.5">
+                          <span>{activeAssignment.questionLinkTitle || 'Link Soal & Dokumen Penugasan (Google Drive)'}</span>
+                          <span className="text-[10px] px-1.5 py-0.2 rounded bg-indigo-200/60 dark:bg-indigo-800 text-indigo-800 dark:text-indigo-200 font-semibold">Tautan Guru Mapel</span>
+                        </p>
+                        <p className="text-[11px] text-indigo-700 dark:text-indigo-400 truncate max-w-sm sm:max-w-md font-mono mt-0.5">
+                          {activeAssignment.questionFileLink}
+                        </p>
+                      </div>
+                    </div>
+                    <a
+                      href={activeAssignment.questionFileLink}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-semibold shrink-0 transition-colors shadow-2xs"
+                    >
+                      <span>Buka Link Soal (GDrive)</span>
+                      <ExternalLink className="w-3.5 h-3.5" />
+                    </a>
+                  </div>
+                )}
               </div>
 
               {/* View for Siswa */}
@@ -530,6 +574,26 @@ export const AssignmentsView: React.FC = () => {
                       <p className="text-slate-700 dark:text-slate-300">
                         {mySubmission.content}
                       </p>
+
+                      {/* Tautan Berkas Jawaban Siswa */}
+                      {mySubmission.answerLink && (
+                        <div className="pt-2 border-t border-emerald-200/80 dark:border-emerald-800/80 flex items-center justify-between gap-2">
+                          <span className="text-[11px] text-emerald-800 dark:text-emerald-300 font-medium flex items-center gap-1.5">
+                            <LinkIcon className="w-3.5 h-3.5 text-emerald-600" />
+                            <span>Link Dokumen Jawaban Siswa (Google Drive / Cloud)</span>
+                          </span>
+                          <a
+                            href={mySubmission.answerLink}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="inline-flex items-center gap-1 px-2.5 py-1 rounded bg-white dark:bg-slate-900 border border-emerald-300 dark:border-emerald-700 text-emerald-700 dark:text-emerald-300 text-[11px] font-semibold hover:bg-emerald-100 transition-colors"
+                          >
+                            <span>Buka Jawaban</span>
+                            <ExternalLink className="w-3 h-3" />
+                          </a>
+                        </div>
+                      )}
+
                       {mySubmission.feedback && (
                         <div className="p-2.5 rounded bg-white dark:bg-slate-900 border border-emerald-100 dark:border-emerald-900">
                           <span className="font-bold text-emerald-950 dark:text-emerald-300 block mb-0.5">
@@ -550,17 +614,37 @@ export const AssignmentsView: React.FC = () => {
                       )}
                       <div>
                         <label className="block text-slate-600 dark:text-slate-400 font-medium mb-1">
-                          Ketikkan Ringkasan Jawaban atau Konfirmasi Berkas
+                          Ketikkan Ringkasan Jawaban atau Catatan Pengumpulan
                         </label>
                         <textarea
-                          rows={3}
-                          required
+                          rows={2}
                           value={studentAnswerText}
                           onChange={(e) => setStudentAnswerText(e.target.value)}
-                          placeholder="Tuliskan jawaban Anda atau keterangan lampiran file tugas..."
+                          placeholder="Tuliskan ringkasan jawaban Anda atau keterangan lampiran file tugas..."
                           className="w-full px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white"
                         ></textarea>
                       </div>
+
+                      {/* Input Upload Link Jawaban Siswa */}
+                      <div>
+                        <label className="block text-slate-600 dark:text-slate-400 font-medium mb-1">
+                          Upload Link Berkas Jawaban (Google Drive, Docs, PDF)
+                        </label>
+                        <div className="relative">
+                          <input
+                            type="url"
+                            value={studentAnswerLink}
+                            onChange={(e) => setStudentAnswerLink(e.target.value)}
+                            placeholder="https://drive.google.com/file/d/... (Pastikan akses diset ke Siapa saja memiliki link)"
+                            className="w-full px-3 py-2 pl-8 rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white font-mono text-xs"
+                          />
+                          <LinkIcon className="w-4 h-4 text-slate-400 absolute left-2.5 top-2.5" />
+                        </div>
+                        <p className="text-[10px] text-slate-400 mt-1">
+                          Tautkan link Google Drive berkas lembar jawaban Anda agar guru mapel dapat memeriksa dokumen tugas Anda secara langsung.
+                        </p>
+                      </div>
+
                       <button
                         type="submit"
                         className="flex items-center gap-2 px-4 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white font-semibold cursor-pointer"
@@ -619,6 +703,23 @@ export const AssignmentsView: React.FC = () => {
                               <p className="text-slate-600 dark:text-slate-400 text-[11px] line-clamp-1 mt-0.5">
                                 {sub.content}
                               </p>
+
+                              {/* Tautan Berkas Jawaban Siswa untuk Guru Mapel */}
+                              {sub.answerLink && (
+                                <div className="mt-1">
+                                  <a
+                                    href={sub.answerLink}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="inline-flex items-center gap-1 text-[11px] font-semibold text-indigo-600 hover:text-indigo-800 dark:text-indigo-400 hover:underline"
+                                  >
+                                    <LinkIcon className="w-3 h-3" />
+                                    <span>Buka Link Jawaban Siswa (Google Drive)</span>
+                                    <ExternalLink className="w-3 h-3" />
+                                  </a>
+                                </div>
+                              )}
+
                               {sub.feedback && (
                                 <p className="text-indigo-600 text-[11px] italic mt-0.5">
                                   Catatan: {sub.feedback}
@@ -1029,6 +1130,42 @@ export const AssignmentsView: React.FC = () => {
                 ></textarea>
               </div>
 
+              {/* Fitur Upload Link Soal Khusus Guru Mata Pelajaran */}
+              <div className="p-3 rounded-lg bg-indigo-50/60 dark:bg-indigo-950/40 border border-indigo-200 dark:border-indigo-800 space-y-2">
+                <div>
+                  <label className="block text-indigo-950 dark:text-indigo-200 font-bold mb-1 flex items-center justify-between">
+                    <span className="flex items-center gap-1.5">
+                      <LinkIcon className="w-3.5 h-3.5 text-indigo-600" />
+                      <span>Upload / Tautkan Link Soal (Google Drive / PDF / Dokumen)</span>
+                    </span>
+                    <span className="text-[10px] text-indigo-600 font-normal">Khusus Guru Mapel</span>
+                  </label>
+                  <input
+                    type="url"
+                    placeholder="https://drive.google.com/file/d/... atau https://docs.google.com/..."
+                    value={newAsgData.questionFileLink || ''}
+                    onChange={(e) => setNewAsgData({ ...newAsgData, questionFileLink: e.target.value })}
+                    className="w-full px-3 py-2 rounded-lg border border-indigo-200 dark:border-indigo-800 bg-white dark:bg-slate-900 text-slate-900 dark:text-white font-mono text-xs"
+                  />
+                  <p className="text-[10px] text-slate-500 mt-1">
+                    Siswa dapat mengklik tautan ini langsung dari dashboard tugas untuk membuka berkas soal di Google Drive.
+                  </p>
+                </div>
+
+                <div>
+                  <label className="block text-slate-600 dark:text-slate-400 font-medium mb-1">
+                    Label / Judul Tautan Soal (Opsional)
+                  </label>
+                  <input
+                    type="text"
+                    placeholder="Contoh: Lembar Soal & Panduan Praktikum (Google Drive)"
+                    value={newAsgData.questionLinkTitle || ''}
+                    onChange={(e) => setNewAsgData({ ...newAsgData, questionLinkTitle: e.target.value })}
+                    className="w-full px-3 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-900 dark:text-white text-xs"
+                  />
+                </div>
+              </div>
+
               <div>
                 <label className="block text-slate-600 dark:text-slate-400 font-medium mb-1">
                   Rubrik Penilaian & Standar Ketuntasan
@@ -1069,9 +1206,33 @@ export const AssignmentsView: React.FC = () => {
             <h3 className="text-sm font-bold text-slate-900 dark:text-white mb-1">
               Penilaian & Umpan Balik Guru
             </h3>
-            <p className="text-xs text-slate-500 mb-4">
+            <p className="text-xs text-slate-500 mb-3">
               Siswa: <strong>{gradingSubmission.studentName}</strong>
             </p>
+
+            {/* Tautan Berkas Jawaban Siswa saat Penilaian */}
+            {gradingSubmission.answerLink && (
+              <div className="mb-4 p-2.5 rounded-lg bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800 flex items-center justify-between gap-2">
+                <div className="min-w-0">
+                  <p className="text-[11px] font-bold text-emerald-950 dark:text-emerald-200 flex items-center gap-1">
+                    <LinkIcon className="w-3.5 h-3.5 text-emerald-600" />
+                    <span>Berkas Jawaban Siswa (Google Drive)</span>
+                  </p>
+                  <p className="text-[10px] text-emerald-700 dark:text-emerald-400 font-mono truncate">
+                    {gradingSubmission.answerLink}
+                  </p>
+                </div>
+                <a
+                  href={gradingSubmission.answerLink}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center gap-1 px-2.5 py-1 rounded bg-emerald-600 hover:bg-emerald-700 text-white text-[11px] font-semibold shrink-0 transition-colors"
+                >
+                  <span>Buka Berkas</span>
+                  <ExternalLink className="w-3 h-3" />
+                </a>
+              </div>
+            )}
 
             <form onSubmit={handleSaveGrade} className="space-y-3 text-xs">
               <div>

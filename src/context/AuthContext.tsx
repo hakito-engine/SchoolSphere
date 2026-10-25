@@ -272,6 +272,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         return ['super_admin', 'kepala_sekolah', 'wakasek_kurikulum', 'guru', 'wali_kelas'].includes(role);
       case 'assignments':
         return ['super_admin', 'wakasek_kurikulum', 'guru', 'wali_kelas', 'siswa'].includes(role);
+      case 'homeroom_reports':
+        return ['super_admin', 'kepala_sekolah', 'wakasek_kurikulum', 'operator', 'wali_kelas'].includes(role);
       case 'exams':
         // Khusus Guru Mapel dan Siswa saja
         return ['guru', 'siswa'].includes(role);

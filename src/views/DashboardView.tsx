@@ -371,9 +371,6 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ onNavigate }) => {
         <div className="absolute right-0 top-0 -mt-10 -mr-10 w-64 h-64 bg-indigo-500/10 rounded-full blur-3xl pointer-events-none"></div>
       </div>
 
-      {/* Komponen Aktivitas Terbaru (Requirement 5) */}
-      <RecentActivitiesSection onNavigate={onNavigate} />
-
       {/* Role-Specific Content */}
 
       {/* 1. SUPER ADMIN DASHBOARD */}

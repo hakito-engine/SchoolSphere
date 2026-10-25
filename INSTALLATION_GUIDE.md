@@ -1,7 +1,7 @@
 # PANDUAN LENGKAP INSTALASI & DEPLOYMENT APLIKASI WEB
-## SchoolSphere Enterprise - Sistem Informasi Manajemen Sekolah Modern
+## SISPAM Enterprise - Sistem Informasi Manajemen Sekolah Modern
 
-Dokumen ini berisi panduan resmi langkah demi langkah untuk menginstalasi, mengompilasi, dan menjalankan aplikasi web **SchoolSphere Enterprise** agar dapat berjalan optimal, cepat, aman, dan tanpa kendala pada berbagai lingkungan hosting dan server web.
+Dokumen ini berisi panduan resmi langkah demi langkah untuk menginstalasi, mengompilasi, dan menjalankan aplikasi web **SISPAM Enterprise** agar dapat berjalan optimal, cepat, aman, dan tanpa kendala pada berbagai lingkungan hosting dan server web.
 
 ---
 
@@ -269,7 +269,7 @@ sudo certbot renew --dry-run
 
 ### 8. PANDUAN PWA (PROGRESSIVE WEB APP) DI WEB & PONSEL
 
-SchoolSphere telah dilengkapi dengan kapabilitas **Progressive Web App (PWA)**:
+SISPAM telah dilengkapi dengan kapabilitas **Progressive Web App (PWA)**:
 1. **Di Komputer (Chrome / Edge / Safari Desktop)**:
    - Akses website sekolah melalui HTTPS.
    - Perhatikan ikon **"Install App"** (tanda komputer dengan panah ke bawah) di ujung kanan bilah alamat (address bar).
@@ -278,7 +278,7 @@ SchoolSphere telah dilengkapi dengan kapabilitas **Progressive Web App (PWA)**:
    - Buka website sekolah di peramban Chrome atau Safari ponsel.
    - Ketuk menu titik tiga (Android) atau tombol Share (iOS).
    - Pilih opsi **"Tambahkan ke Layar Utama" (Add to Home Screen)**.
-   - Ikon aplikasi SchoolSphere akan muncul di menu ponsel dan siap dibuka kapan saja secara responsif.
+   - Ikon aplikasi SISPAM akan muncul di menu ponsel dan siap dibuka kapan saja secara responsif.
 
 ---
 
@@ -298,12 +298,12 @@ Layar putih terjadi jika Anda memilih *"Deploy from a branch (root)"*. GitHub Pa
 
 2. **Jalankan Proses Build (Run Workflow):**
    - Klik tab **Actions** di bilah menu atas repositori GitHub Anda.
-   - Di bilah samping kiri, klik nama workflow **"Deploy SchoolSphere to GitHub Pages"**.
+   - Di bilah samping kiri, klik nama workflow **"Deploy SISPAM to GitHub Pages"**.
    - Di pojok kanan atas, klik tombol dropdown **"Run workflow"** > pilih branch `main` (atau `master`) > klik tombol hijau **"Run workflow"**.
 
 3. **Buka Aplikasi Setelah Selesai (Centang Hijau ✅):**
    - Proses build akan berjalan sekitar 1–2 menit hingga muncul ikon centang hijau ✅.
-   - Buka tautan GitHub Pages Anda (misal `https://username.github.io/SchoolSphere/`).
+   - Buka tautan GitHub Pages Anda (misal `https://username.github.io/SISPAM/`).
    - Tekan `Ctrl + F5` (Windows) atau `Cmd + Shift + R` (Mac) untuk refresh browser tanpa cache. Aplikasi akan langsung tampil sempurna!
 
 #### Tips Izin Alur Kerja (Workflow Permissions):
@@ -317,7 +317,7 @@ Jika workflow di tab Actions menampilkan status gagal (*Permission Denied*), akt
 
 | Gejala Galat | Penyebab | Solusi |
 |---|---|---|
-| **Layar putih di GitHub Pages** | Belum menjalankan workflow build GitHub Actions. | Buka tab **Actions** di GitHub, klik *"Deploy SchoolSphere to GitHub Pages"*, lalu klik *"Run workflow"*. Tunggu centang hijau ✅. |
+| **Layar putih di GitHub Pages** | Belum menjalankan workflow build GitHub Actions. | Buka tab **Actions** di GitHub, klik *"Deploy SISPAM to GitHub Pages"*, lalu klik *"Run workflow"*. Tunggu centang hijau ✅. |
 | **Halaman 404 saat di-refresh** | Web server belum dikonfigurasi untuk SPA Rewrite. | Tambahkan baris `try_files $uri $uri/ /index.html;` pada Nginx atau aturan Rewrite pada `.htaccess` Apache. |
 | **Tampilan kosong / Blank putih** | Kesalahan base URL atau berkas JS terblokir. | Pastikan `base: './'` atau `base: '/'` sesuai dengan lokasi sub-direktori hosting Anda di `vite.config.ts`. |
 | **Port 3000 sudah terpakai** | Port bentrok dengan layanan lain. | Jalankan `npx kill-port 3000` atau gunakan flag `--port 3001` saat menjalankan `npm run dev`. |
@@ -326,4 +326,4 @@ Jika workflow di tab Actions menampilkan status gagal (*Permission Denied*), akt
 
 ---
 
-*Hak Cipta © 2024–2026 Tim Pengembang SchoolSphere Enterprise. Panduan ini dirancang untuk kelancaran operasional teknologi informasi sekolah.*
+*Hak Cipta © 2024–2026 Tim Pengembang SISPAM Enterprise. Panduan ini dirancang untuk kelancaran operasional teknologi informasi sekolah.*

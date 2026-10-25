@@ -1556,7 +1556,7 @@ export class DataService {
     };
 
     let sql = `-- =========================================================================\n`;
-    sql += `-- SchoolSphere Enterprise - Official MySQL Database Schema & Initial Data Dump\n`;
+    sql += `-- SISPAM Enterprise - Official MySQL Database Schema & Initial Data Dump\n`;
     sql += `-- Dibuat Otomatis: ${new Date().toISOString()}\n`;
     sql += `-- Kompatibilitas: MySQL 8.0+ / MariaDB 10.5+\n`;
     sql += `-- Penggunaan Jangka Panjang: Basis Web App & Relasional RDBMS\n`;
@@ -1837,7 +1837,7 @@ export class DataService {
 
     const dump = {
       version: '2.0.0-PRO-SYNC',
-      app: 'SchoolSphere Enterprise',
+      app: 'SISPAM Enterprise',
       exportedAt: new Date().toISOString(),
       schoolProfile: this.getSchoolProfile(),
       academicYears: this.getAcademicYears(),

@@ -142,14 +142,28 @@ export const AttendanceView: React.FC = () => {
     let a = 0;
     let t = 0;
 
+    const sNotes: string[] = [];
+    const iNotes: string[] = [];
+    const aNotes: string[] = [];
+    const tNotes: string[] = [];
+
     periodAttendances.forEach((att) => {
       const rec = att.records?.find((r) => r.studentId === std.id || r.studentName === std.name);
       if (rec) {
         if (rec.status === 'H') h++;
-        else if (rec.status === 'S') s++;
-        else if (rec.status === 'I') i++;
-        else if (rec.status === 'A') a++;
-        else if (rec.status === 'T') t++;
+        else if (rec.status === 'S') {
+          s++;
+          if (rec.note && rec.note.trim()) sNotes.push(rec.note.trim());
+        } else if (rec.status === 'I') {
+          i++;
+          if (rec.note && rec.note.trim()) iNotes.push(rec.note.trim());
+        } else if (rec.status === 'A') {
+          a++;
+          if (rec.note && rec.note.trim()) aNotes.push(rec.note.trim());
+        } else if (rec.status === 'T') {
+          t++;
+          if (rec.note && rec.note.trim()) tNotes.push(rec.note.trim());
+        }
       }
     });
 
@@ -161,6 +175,30 @@ export const AttendanceView: React.FC = () => {
     const finalT = totalFromRecords > 0 ? t : (std.attendance?.terlambat || 1);
     const totalSesi = finalH + finalS + finalI + finalA + finalT;
     const pct = totalSesi > 0 ? Math.round((finalH / totalSesi) * 100) : 0;
+
+    // Requirement 5: Format rekapitulasi keterangan presensi dari guru mata pelajaran
+    // Contoh: Ahmad Fauzi mempunyai rekap: 2 sakit (Rawat Inap), 1 alpa, 3 terlambat (motor rusak, terlambat bangun, macet)
+    const cleanNotes = (notes: string[]) => Array.from(new Set(notes.map((n) => n.trim()).filter(Boolean)));
+    const sClean = cleanNotes(sNotes);
+    const iClean = cleanNotes(iNotes);
+    const aClean = cleanNotes(aNotes);
+    const tClean = cleanNotes(tNotes);
+
+    const noteParts: string[] = [];
+    if (finalS > 0) {
+      noteParts.push(`${finalS} sakit${sClean.length > 0 ? ` (${sClean.join(', ')})` : ''}`);
+    }
+    if (finalI > 0) {
+      noteParts.push(`${finalI} izin${iClean.length > 0 ? ` (${iClean.join(', ')})` : ''}`);
+    }
+    if (finalA > 0) {
+      noteParts.push(`${finalA} alpa${aClean.length > 0 ? ` (${aClean.join(', ')})` : ''}`);
+    }
+    if (finalT > 0) {
+      noteParts.push(`${finalT} terlambat${tClean.length > 0 ? ` (${tClean.join(', ')})` : ''}`);
+    }
+
+    const detailedNotesSummary = noteParts.length > 0 ? noteParts.join(', ') : 'Hadir Penuh (Nihil catatan)';
 
     let statusText = 'Sangat Baik (≥95%)';
     let statusBadge = 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-300 border-emerald-200';
@@ -190,6 +228,7 @@ export const AttendanceView: React.FC = () => {
       pct,
       statusText,
       statusBadge,
+      detailedNotesSummary,
     };
   });
 
@@ -829,13 +868,14 @@ export const AttendanceView: React.FC = () => {
                     <th className="py-3 px-3 text-center w-14 text-purple-700 dark:text-purple-400">T</th>
                     <th className="py-3 px-3 text-center w-20">Total Sesi</th>
                     <th className="py-3 px-3 text-center w-20">% Hadir</th>
-                    <th className="py-3 px-4 text-center">Status / Catatan</th>
+                    <th className="py-3 px-4 text-center">Status</th>
+                    <th className="py-3 px-4 text-left">Rincian Keterangan Presensi Guru Mapel</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100 dark:divide-slate-800/60">
                   {studentPeriodSummary.length === 0 ? (
                     <tr>
-                      <td colSpan={12} className="py-8 text-center text-slate-400">
+                      <td colSpan={13} className="py-8 text-center text-slate-400">
                         Tidak ada data peserta didik pada kelas terpilih.
                       </td>
                     </tr>
@@ -858,6 +898,11 @@ export const AttendanceView: React.FC = () => {
                         <td className="py-2.5 px-4 text-center">
                           <span className={`px-2 py-0.5 rounded text-[11px] font-bold border ${item.statusBadge}`}>
                             {item.statusText}
+                          </span>
+                        </td>
+                        <td className="py-2.5 px-4 text-xs font-medium text-slate-700 dark:text-slate-300">
+                          <span className="bg-slate-100 dark:bg-slate-800 px-2 py-1 rounded inline-block">
+                            {item.detailedNotesSummary}
                           </span>
                         </td>
                       </tr>
@@ -957,14 +1002,15 @@ export const AttendanceView: React.FC = () => {
                 <th className="border border-black py-1.5 px-2 text-center w-24">NISN</th>
                 <th className="border border-black py-1.5 px-3 text-left">Nama Peserta Didik</th>
                 <th className="border border-black py-1.5 px-2 text-center w-10">L/P</th>
-                <th className="border border-black py-1.5 px-2 text-center w-10">H</th>
-                <th className="border border-black py-1.5 px-2 text-center w-10">S</th>
-                <th className="border border-black py-1.5 px-2 text-center w-10">I</th>
-                <th className="border border-black py-1.5 px-2 text-center w-10">A</th>
-                <th className="border border-black py-1.5 px-2 text-center w-10">T</th>
-                <th className="border border-black py-1.5 px-2 text-center w-14">Sesi</th>
-                <th className="border border-black py-1.5 px-2 text-center w-14">%</th>
-                <th className="border border-black py-1.5 px-3 text-center">Status</th>
+                <th className="border border-black py-1.5 px-2 text-center w-8">H</th>
+                <th className="border border-black py-1.5 px-2 text-center w-8">S</th>
+                <th className="border border-black py-1.5 px-2 text-center w-8">I</th>
+                <th className="border border-black py-1.5 px-2 text-center w-8">A</th>
+                <th className="border border-black py-1.5 px-2 text-center w-8">T</th>
+                <th className="border border-black py-1.5 px-2 text-center w-12">Sesi</th>
+                <th className="border border-black py-1.5 px-2 text-center w-12">%</th>
+                <th className="border border-black py-1.5 px-2 text-center w-20">Status</th>
+                <th className="border border-black py-1.5 px-3 text-left">Rincian Keterangan Presensi dari Guru Mapel</th>
               </tr>
             </thead>
             <tbody>
@@ -981,7 +1027,8 @@ export const AttendanceView: React.FC = () => {
                   <td className="border border-black py-1 px-2 text-center font-mono">{st.t}</td>
                   <td className="border border-black py-1 px-2 text-center font-mono">{st.totalSesi}</td>
                   <td className="border border-black py-1 px-2 text-center font-mono font-bold">{st.pct}%</td>
-                  <td className="border border-black py-1 px-3 text-center font-semibold">{st.statusText}</td>
+                  <td className="border border-black py-1 px-2 text-center font-semibold text-[11px]">{st.statusText.split(' ')[0]}</td>
+                  <td className="border border-black py-1 px-3 text-[11px] leading-tight">{st.detailedNotesSummary}</td>
                 </tr>
               ))}
             </tbody>

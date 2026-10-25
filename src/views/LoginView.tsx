@@ -73,7 +73,7 @@ export const LoginView: React.FC = () => {
       cleanAdminPhone = '62' + cleanAdminPhone.substring(1);
     }
     const textMsg = encodeURIComponent(
-      `Halo Super Admin SchoolSphere (${profile.name}),\n\nSaya memohon bantuan reset kata sandi (password) akun portal sekolah:\n- Nama Lengkap: ${forgotName}\n- Username / NIP / NISN: ${forgotIdentifier}\n- No. WhatsApp Saya: ${forgotWaNumber}\n\nMohon bantuannya untuk mengirimkan kata sandi baru akun saya melalui pesan WhatsApp ini. Terima kasih.`
+      `Halo Super Admin SISPAM (${profile.name}),\n\nSaya memohon bantuan reset kata sandi (password) akun portal sekolah:\n- Nama Lengkap: ${forgotName}\n- Username / NIP / NISN: ${forgotIdentifier}\n- No. WhatsApp Saya: ${forgotWaNumber}\n\nMohon bantuannya untuk mengirimkan kata sandi baru akun saya melalui pesan WhatsApp ini. Terima kasih.`
     );
     const waUrl = `https://api.whatsapp.com/send?phone=${cleanAdminPhone}&text=${textMsg}`;
     setForgotWaLink(waUrl);
@@ -87,11 +87,11 @@ export const LoginView: React.FC = () => {
   };
 
   return (
-    <div className="min-h-screen bg-slate-100 dark:bg-slate-950 flex flex-col justify-center py-12 sm:px-6 lg:px-8 transition-colors">
+    <div className="min-h-screen bg-gradient-to-br from-indigo-50/50 via-slate-50 to-slate-100 dark:from-slate-950 dark:via-slate-900 dark:to-slate-950 flex flex-col justify-center py-12 sm:px-6 lg:px-8 transition-colors">
       <div className="sm:mx-auto sm:w-full sm:max-w-md">
         {/* Header Branding */}
         <div className="text-center space-y-2">
-          <div className="inline-flex p-2.5 bg-white dark:bg-slate-900 rounded-2xl shadow-md border border-slate-200 dark:border-slate-800 mb-2">
+          <div className="inline-flex p-3 bg-white dark:bg-slate-900 rounded-2xl shadow-lg border border-indigo-100 dark:border-slate-800 mb-2">
             <img
               src={profile.logoUrl}
               alt={profile.name}
@@ -100,10 +100,13 @@ export const LoginView: React.FC = () => {
             />
           </div>
 
-          <h1 className="text-2xl font-extrabold tracking-tight text-slate-900 dark:text-white">
-            SchoolSphere <span className="text-indigo-600 dark:text-indigo-400">PRO</span>
+          <h1 className="text-3xl font-black tracking-tight text-slate-900 dark:text-white">
+            SISPAM <span className="text-indigo-600 dark:text-indigo-400">PRO</span>
           </h1>
-          <p className="text-xs font-semibold text-slate-600 dark:text-slate-400 uppercase tracking-wider">
+          <p className="text-xs font-semibold text-indigo-700 dark:text-indigo-300 tracking-wide">
+            Sistem Integrasi Sekolah, Pembelajaran, & Administrasi
+          </p>
+          <p className="text-xs font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wider pt-1">
             {profile.name}
           </p>
           <p className="text-[11px] text-slate-500 font-mono">
@@ -224,8 +227,8 @@ export const LoginView: React.FC = () => {
         </div>
 
         {/* Quiet Footer */}
-        <div className="mt-6 text-center text-[11px] text-slate-400">
-          <p>SchoolSphere Enterprise · Role-Based Access Control</p>
+        <div className="mt-6 text-center text-[11px] text-slate-500">
+          <p className="font-semibold text-slate-700 dark:text-slate-300">SISPAM · Sistem Integrasi Sekolah, Pembelajaran, & Administrasi</p>
           <p className="mt-0.5 text-[10px] font-mono">Keamanan data terverifikasi · Multi-User Session Protection</p>
         </div>
       </div>

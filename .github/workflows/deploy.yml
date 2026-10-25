@@ -1,4 +1,4 @@
-name: Deploy SchoolSphere to GitHub Pages
+name: Deploy SISPAM to GitHub Pages
 
 on:
   push:

@@ -31,7 +31,7 @@ export class ErrorBoundary extends Component<Props, State> {
   }
 
   componentDidCatch(error: Error, errorInfo: ErrorInfo) {
-    console.error('SchoolSphere Uncaught Exception caught by ErrorBoundary:', error, errorInfo);
+    console.error('SISPAM Uncaught Exception caught by ErrorBoundary:', error, errorInfo);
     this.setState({
       error,
       errorInfo,
@@ -69,7 +69,7 @@ export class ErrorBoundary extends Component<Props, State> {
               </div>
               <div>
                 <h1 className="text-xl font-bold text-white tracking-tight">
-                  SchoolSphere Recovery Mode
+                  SISPAM Recovery Mode
                 </h1>
                 <p className="text-xs text-slate-400">
                   Aplikasi mengalami kendala saat memproses tampilan (Cegah Layar Putih)
@@ -118,7 +118,7 @@ export class ErrorBoundary extends Component<Props, State> {
             </div>
 
             <div className="mt-6 pt-4 border-t border-slate-700/60 text-[11px] text-slate-400 text-center">
-              SchoolSphere PRO · Sistem Pemulihan Otomatis Hakito Engine
+              SISPAM PRO · Sistem Pemulihan Otomatis Hakito Engine
             </div>
           </div>
         </div>

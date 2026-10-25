@@ -214,6 +214,8 @@ export interface Assignment {
   submissionCount: number;
   published: boolean;
   rubricNotes?: string;
+  questionFileLink?: string; // Link soal (misal Google Drive, Cloud Storage) khusus Guru Mapel
+  questionLinkTitle?: string;
 }
 
 export interface AssignmentSubmission {
@@ -224,6 +226,7 @@ export interface AssignmentSubmission {
   submittedAt: string;
   content: string;
   fileName?: string;
+  answerLink?: string; // Link jawaban siswa (misal Google Drive, Google Docs, Canva, Github)
   score?: number;
   feedback?: string;
   status: 'pending' | 'graded' | 'late';

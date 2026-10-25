@@ -3,6 +3,7 @@ import { useAuth } from '../context/AuthContext';
 import { DataService } from '../services/dataService';
 import { SchoolProfile, AuditLog, AcademicYearConfig } from '../types';
 import { OfficialLetterhead } from '../components/common/OfficialLetterhead';
+import { formatActionText, formatRoleText } from '../utils/formatters';
 import {
   Settings,
   Save,
@@ -66,7 +67,7 @@ export const SchoolSettingsView: React.FC = () => {
         const url = URL.createObjectURL(blob);
         const a = document.createElement('a');
         a.href = url;
-        a.download = 'PANDUAN_INSTALASI_WEB_SCHOOLSPHERE.md';
+        a.download = 'PANDUAN_INSTALASI_WEB_SISPAM.md';
         a.click();
         URL.revokeObjectURL(url);
       })
@@ -181,11 +182,11 @@ export const SchoolSettingsView: React.FC = () => {
       })
       .catch(() => {
         const defaultPython = `"""
-SchoolSphere Enterprise - Python REST API Backend
+SISPAM Enterprise - Python REST API Backend
 Framework: FastAPI + SQLAlchemy + PyMySQL
 """
 from fastapi import FastAPI
-app = FastAPI(title="SchoolSphere Enterprise API")
+app = FastAPI(title="SISPAM Enterprise API")
 
 @app.get("/api/health")
 def health():
@@ -316,7 +317,7 @@ def health():
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `SchoolSphere_Backup_${new Date().toISOString().substring(0, 10)}.json`;
+    a.download = `SISPAM_Backup_${new Date().toISOString().substring(0, 10)}.json`;
     a.click();
     URL.revokeObjectURL(url);
   };
@@ -349,7 +350,7 @@ def health():
             }
           }, 300);
         } else {
-          setImportStatus('❌ Gagal memproses berkas. Pastikan format file adalah cadangan JSON resmi SchoolSphere.');
+          setImportStatus('❌ Gagal memproses berkas. Pastikan format file adalah cadangan JSON resmi SISPAM.');
         }
       } catch (err) {
         console.error(err);
@@ -1921,7 +1922,7 @@ def health():
                 </h3>
               </div>
               <p className="text-xs text-slate-300 max-w-2xl leading-relaxed">
-                Panduan komprehensif langkah demi langkah agar aplikasi SchoolSphere Enterprise dapat terpasang, dikompilasi, dan berjalan lancar di website sekolah tanpa galat 404 saat di-refresh.
+                Panduan komprehensif langkah demi langkah agar aplikasi SISPAM Enterprise dapat terpasang, dikompilasi, dan berjalan lancar di website sekolah tanpa galat 404 saat di-refresh.
               </p>
             </div>
 
@@ -1969,14 +1970,14 @@ def health():
                   <div className="flex gap-2">
                     <span className="flex-none flex items-center justify-center w-5 h-5 rounded-full bg-indigo-100 text-indigo-700 dark:bg-indigo-900 dark:text-indigo-300 font-bold text-[11px]">2</span>
                     <p>
-                      <strong>Jalankan Workflow (Build):</strong> Klik tab <strong>Actions</strong> di menu atas repositori GitHub Anda. Di sisi kiri, klik nama workflow <strong>"Deploy SchoolSphere to GitHub Pages"</strong>. Kemudian di sebelah kanan atas, klik tombol dropdown <strong>"Run workflow"</strong>, pilih branch <code>main</code> (atau <code>master</code>), lalu klik tombol hijau <strong>"Run workflow"</strong>.
+                      <strong>Jalankan Workflow (Build):</strong> Klik tab <strong>Actions</strong> di menu atas repositori GitHub Anda. Di sisi kiri, klik nama workflow <strong>"Deploy SISPAM to GitHub Pages"</strong>. Kemudian di sebelah kanan atas, klik tombol dropdown <strong>"Run workflow"</strong>, pilih branch <code>main</code> (atau <code>master</code>), lalu klik tombol hijau <strong>"Run workflow"</strong>.
                     </p>
                   </div>
 
                   <div className="flex gap-2">
                     <span className="flex-none flex items-center justify-center w-5 h-5 rounded-full bg-indigo-100 text-indigo-700 dark:bg-indigo-900 dark:text-indigo-300 font-bold text-[11px]">3</span>
                     <p>
-                      <strong>Tunggu Centang Hijau (✅):</strong> Proses kompilasi Vite akan berjalan otomatis selama 1–2 menit. Setelah ikon berubah menjadi centang hijau ✅, klik tautan website GitHub Pages Anda. Tekan <code>Ctrl + F5</code> (Windows) atau <code>Cmd + Shift + R</code> (Mac) untuk memuat ulang dan menghapus cache browser lama. Layar aplikasi SchoolSphere akan langsung tampil sempurna tanpa layar putih!
+                      <strong>Tunggu Centang Hijau (✅):</strong> Proses kompilasi Vite akan berjalan otomatis selama 1–2 menit. Setelah ikon berubah menjadi centang hijau ✅, klik tautan website GitHub Pages Anda. Tekan <code>Ctrl + F5</code> (Windows) atau <code>Cmd + Shift + R</code> (Mac) untuk memuat ulang dan menghapus cache browser lama. Layar aplikasi SISPAM akan langsung tampil sempurna tanpa layar putih!
                     </p>
                   </div>
 
@@ -2447,14 +2448,18 @@ def health():
                   <tr key={log.id} className="hover:bg-slate-50/70 dark:hover:bg-slate-800/40">
                     <td className="py-2 px-3 font-mono text-slate-500 whitespace-nowrap">{log.timestamp}</td>
                     <td className="py-2 px-3 font-bold text-slate-900 dark:text-white whitespace-nowrap">{log.userName}</td>
-                    <td className="py-2 px-3">
-                      <span className="px-1.5 py-0.5 rounded text-[10px] bg-slate-100 dark:bg-slate-800 font-mono">
-                        {log.role}
+                    <td className="py-2.5 px-3">
+                      <span className="px-2 py-0.5 rounded-md text-[10px] bg-indigo-50 text-indigo-700 dark:bg-indigo-950/60 dark:text-indigo-300 font-semibold border border-indigo-200/60 dark:border-indigo-800">
+                        {formatRoleText(log.role)}
                       </span>
                     </td>
-                    <td className="py-2 px-3 font-medium text-slate-700 dark:text-slate-300 whitespace-nowrap">{log.module}</td>
-                    <td className="py-2 px-3 font-mono text-indigo-600 dark:text-indigo-400 font-bold whitespace-nowrap">{log.action}</td>
-                    <td className="py-2 px-3 text-slate-600 dark:text-slate-300">{log.details}</td>
+                    <td className="py-2.5 px-3 font-semibold text-slate-800 dark:text-slate-200 whitespace-nowrap">{log.module}</td>
+                    <td className="py-2.5 px-3 whitespace-nowrap">
+                      <span className="inline-flex items-center px-2 py-0.5 rounded-md text-[11px] font-bold bg-indigo-50 text-indigo-800 dark:bg-indigo-950/80 dark:text-indigo-200 border border-indigo-200/80 dark:border-indigo-800">
+                        {formatActionText(log.action)}
+                      </span>
+                    </td>
+                    <td className="py-2.5 px-3 text-slate-600 dark:text-slate-300">{log.details}</td>
                   </tr>
                 ))}
               </tbody>

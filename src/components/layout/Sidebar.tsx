@@ -22,6 +22,7 @@ import {
   ShieldCheck,
   ChevronRight,
   MessageSquare,
+  Award,
 } from 'lucide-react';
 
 interface SidebarProps {
@@ -69,6 +70,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
         { id: 'attendance', label: 'Presensi & Kehadiran', icon: CalendarCheck, module: 'attendance' },
         { id: 'journals', label: 'Jurnal Mengajar', icon: FileSpreadsheet, module: 'journals' },
         { id: 'assignments', label: 'Tugas & Penilaian', icon: GraduationCap, module: 'assignments' },
+        { id: 'homeroom_reports', label: 'Rapor & Leger Wali Kelas', icon: Award, module: 'homeroom_reports' },
         { id: 'exams', label: 'Ujian Online (CBT)', icon: Laptop, module: 'exams' },
       ],
     },
@@ -122,12 +124,12 @@ export const Sidebar: React.FC<SidebarProps> = ({
         <div className="h-16 flex items-center justify-between px-4 border-b border-slate-200 dark:border-slate-800 shrink-0">
           <div className="flex items-center gap-2 overflow-hidden">
             <div className="w-9 h-9 rounded-lg bg-indigo-600 text-white flex items-center justify-center font-extrabold text-base shrink-0 shadow-sm">
-              SS
+              SP
             </div>
             {isExpanded && (
               <div className="leading-tight truncate">
                 <p className="text-xs font-bold text-slate-900 dark:text-white tracking-wide truncate">
-                  SCHOOLSPHERE
+                  SISPAM
                 </p>
                 <p className="text-[10px] text-indigo-600 dark:text-indigo-400 font-semibold tracking-widest uppercase">
                   ENTERPRISE PRO
@@ -213,7 +215,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
         {/* Footer info */}
         {isExpanded && (
           <div className="p-3 border-t border-slate-200 dark:border-slate-800 text-[11px] text-slate-400 text-center">
-            <p className="font-semibold text-slate-600 dark:text-slate-300">SchoolSphere PRO</p>
+            <p className="font-semibold text-slate-600 dark:text-slate-300">SISPAM PRO</p>
             <p className="text-[10px]">Hakito Engine v2.4</p>
           </div>
         )}

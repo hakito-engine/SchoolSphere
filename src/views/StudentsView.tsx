@@ -328,7 +328,7 @@ export const StudentsView: React.FC = () => {
 
     const workbook = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(workbook, worksheet, 'Data_Siswa');
-    XLSX.writeFile(workbook, 'Template_Import_Siswa_SchoolSphere.xlsx');
+    XLSX.writeFile(workbook, 'Template_Import_Siswa_SISPAM.xlsx');
   };
 
   const handleFileUploadExcel = (e: React.ChangeEvent<HTMLInputElement>) => {
