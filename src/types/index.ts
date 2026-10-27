@@ -334,6 +334,23 @@ export interface NotificationItem {
   read: boolean;
   type: 'tugas' | 'kehadiran' | 'nilai' | 'pengumuman' | 'jurnal';
   linkTarget?: string;
+  targetUserId?: string; // ID siswa penerima khusus (misal: koreksi nilai)
+  targetStudentId?: string; // ID data siswa
+}
+
+export interface EffectiveWeekConfig {
+  id: string;
+  academicYear: string; // misal "2024/2025"
+  semester: 'Ganjil' | 'Genap';
+  totalWeeks: number; // total minggu kalender per semester (misal: 26)
+  effectiveWeeks: number; // minggu efektif kegiatan belajar mengajar (misal: 18)
+  ineffectiveWeeks: number; // minggu tidak efektif (misal: 8)
+  effectiveDays: number; // jumlah hari efektif KBM (misal: 90 hari)
+  holidaysCount: number; // libur semester/nasional (misal: 15 hari)
+  assessmentWeeks: number; // alokasi minggu asesmen PTS/PAS (misal: 2)
+  notes?: string;
+  updatedAt?: string;
+  updatedBy?: string;
 }
 
 export interface SchoolProfile {
@@ -363,6 +380,7 @@ export interface SchoolProfile {
   documentDate?: string;
   useCustomDocumentDate?: boolean;
   officialLetterNumberFormat?: string; // Form Pengaturan Format Nomor Surat
+  showOfficialLetterNumber?: boolean; // Toggle Aktifkan/Nonaktifkan Nomor Surat saat Cetak Dokumen (Admin)
 }
 
 export interface AcademicYearConfig {
@@ -410,5 +428,37 @@ export interface PasswordResetRequest {
   resolvedAt?: string;
   resolvedBy?: string;
   newPasswordGenerated?: string;
+}
+
+export type ExtracurricularPredicate = 'Sangat Baik' | 'Baik' | 'Cukup' | 'Kurang';
+
+export interface StudentExtracurricular {
+  id: string;
+  studentId: string;
+  studentName: string;
+  classId: string;
+  academicYear: string;
+  semester: 'Ganjil' | 'Genap';
+  activityName: string;
+  predicate: ExtracurricularPredicate;
+  description: string;
+  updatedAt?: string;
+  updatedBy?: string;
+}
+
+export interface SubjectLearningObjective {
+  id: string;
+  subjectId: string;
+  subjectName: string;
+  grade: 'X' | 'XI' | 'XII';
+  semester: 'Ganjil' | 'Genap';
+  academicYear: string;
+  phase: 'Fase E' | 'Fase F';
+  tpCode: string; // e.g. 'TP 1', 'TP 2'
+  title: string; // Lingkup Materi / Elemen CP
+  description: string; // Rumusan Tujuan Pembelajaran (ATP)
+  topic: string; // Elemen Kompetensi
+  teacherId: string;
+  teacherName: string;
 }
 

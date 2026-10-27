@@ -1,6 +1,7 @@
 import React, { useState, useMemo } from 'react';
-import { useAuth } from '../context/AuthContext';
+import { useAuth, getTeacherHomeroomInfo } from '../context/AuthContext';
 import { DataService } from '../services/dataService';
+import { StudentExtracurricular, SubjectLearningObjective, ExtracurricularPredicate } from '../types';
 import { PrintModal } from '../components/common/PrintModal';
 import * as XLSX from 'xlsx';
 import {
@@ -20,6 +21,11 @@ import {
   GraduationCap,
   Sparkles,
   Edit3,
+  Plus,
+  Trash2,
+  Edit2,
+  X,
+  Check,
 } from 'lucide-react';
 
 export const HomeroomReportView: React.FC = () => {
@@ -32,22 +38,26 @@ export const HomeroomReportView: React.FC = () => {
   const allAttendances = DataService.getAttendance();
   const academicYears = DataService.getAcademicYears();
   const profile = DataService.getSchoolProfile();
+  const [extracurriculars, setExtracurriculars] = useState<StudentExtracurricular[]>(() => DataService.getExtracurriculars());
+  const allLearningObjectives = DataService.getLearningObjectives();
 
   // Active academic year configuration
   const activeYearConfig = academicYears.find((ay) => ay.isActive) || academicYears[0];
   const [selectedYear, setSelectedYear] = useState(activeYearConfig?.year || '2024/2025');
   const [selectedSemester, setSelectedSemester] = useState<'Ganjil' | 'Genap'>(activeYearConfig?.semester || 'Ganjil');
 
-  // Requirement 4 & 6: Wali kelas STRICTLY locked to their homeroom class!
-  // Wali kelas cannot manage or view other classes' report cards or grade ledgers.
-  const isHomeroomTeacher = currentUser.role === 'wali_kelas';
+  // Wali kelas is strictly locked to their assigned homeroom class.
+  // Guru Mapel who is also assigned as Wali Kelas gets full Wali Kelas capabilities for their class.
+  // Guru Mapel without homeroom duty does not have access.
+  const homeroomInfo = useMemo(() => getTeacherHomeroomInfo(currentUser), [currentUser]);
+  const isHomeroomTeacher = currentUser.role === 'wali_kelas' || (currentUser.role === 'guru' && homeroomInfo.isHomeroom);
   const homeroomClassId = isHomeroomTeacher
-    ? currentUser.classId || 'cls-xmipa1'
+    ? (homeroomInfo.classId || currentUser.classId || 'cls-xmipa1')
     : classes[0]?.id || 'cls-xmipa1';
 
   const [selectedClassId, setSelectedClassId] = useState<string>(homeroomClassId);
 
-  // If role is wali_kelas, strictly enforce current class id
+  // If role is homeroom teacher, strictly enforce their assigned class
   const effectiveClassId = isHomeroomTeacher ? homeroomClassId : selectedClassId;
   const currentClass = classes.find((c) => c.id === effectiveClassId) || classes[0];
 
@@ -73,12 +83,131 @@ export const HomeroomReportView: React.FC = () => {
     'std-budi': 'Ananda Budi Pratama bersemangat dan tekun dalam praktik kejuruan. Terus tingkatkan fokus belajar mandiri serta ketelitian.',
   });
 
+  // Modal State for Ekstrakurikuler (Add / Edit) - Khusus Wali Kelas sesuai kelas binaan
+  const [isExtraModalOpen, setIsExtraModalOpen] = useState(false);
+  const [editingExtraId, setEditingExtraId] = useState<string | null>(null);
+  const [extraForm, setExtraForm] = useState<{
+    id?: string;
+    studentId: string;
+    studentName: string;
+    activityName: string;
+    predicate: ExtracurricularPredicate;
+    description: string;
+  }>({
+    studentId: '',
+    studentName: '',
+    activityName: 'Pramuka (Wajib)',
+    predicate: 'Sangat Baik',
+    description: '',
+  });
+
+  const handleOpenAddExtra = (targetStudentId?: string, targetStudentName?: string) => {
+    setEditingExtraId(null);
+    const sId = targetStudentId || activeStudent?.id || classStudents[0]?.id || '';
+    const sName = targetStudentName || activeStudent?.name || classStudents[0]?.name || '';
+    setExtraForm({
+      studentId: sId,
+      studentName: sName,
+      activityName: 'Pramuka (Wajib)',
+      predicate: 'Sangat Baik',
+      description: 'Aktif, disiplin, dan bertanggung jawab dalam setiap kegiatan dan tugas kepramukaan.',
+    });
+    setIsExtraModalOpen(true);
+  };
+
+  const handleOpenEditExtra = (ext: StudentExtracurricular) => {
+    setEditingExtraId(ext.id);
+    setExtraForm({
+      id: ext.id,
+      studentId: ext.studentId,
+      studentName: ext.studentName,
+      activityName: ext.activityName,
+      predicate: ext.predicate,
+      description: ext.description,
+    });
+    setIsExtraModalOpen(true);
+  };
+
+  const handleSaveExtra = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!extraForm.studentId || !extraForm.activityName.trim()) return;
+
+    const std = allStudents.find((s) => s.id === extraForm.studentId);
+    const itemToSave: StudentExtracurricular = {
+      id: editingExtraId || extraForm.id || 'ext-' + Date.now(),
+      studentId: extraForm.studentId,
+      studentName: std?.name || extraForm.studentName || 'Peserta Didik',
+      classId: effectiveClassId,
+      academicYear: selectedYear,
+      semester: selectedSemester,
+      activityName: extraForm.activityName.trim(),
+      predicate: extraForm.predicate,
+      description: extraForm.description.trim() || 'Berpartisipasi aktif dalam kegiatan ekstrakurikuler.',
+    };
+
+    DataService.saveExtracurricular(itemToSave, {
+      id: currentUser.id,
+      name: currentUser.name,
+      role: currentUser.role,
+    });
+
+    setExtracurriculars(DataService.getExtracurriculars());
+    setIsExtraModalOpen(false);
+  };
+
+  const handleDeleteExtra = (id: string, activityName: string) => {
+    if (confirm(`Apakah Anda yakin ingin menghapus data ekstrakurikuler "${activityName}"?`)) {
+      DataService.deleteExtracurricular(id, {
+        id: currentUser.id,
+        name: currentUser.name,
+        role: currentUser.role,
+      });
+      setExtracurriculars(DataService.getExtracurriculars());
+    }
+  };
+
+  // Effective weeks baseline set by Wakasek Kurikulum
+  const effectiveWeeksConfig = DataService.getActiveEffectiveWeeks(selectedYear, selectedSemester);
+
+  let effectiveDate = new Date().toLocaleDateString('id-ID', {
+    day: 'numeric',
+    month: 'long',
+    year: 'numeric',
+  });
+  if (profile.useCustomDocumentDate && profile.documentDate) {
+    try {
+      const parsedDate = new Date(profile.documentDate);
+      if (!isNaN(parsedDate.getTime())) {
+        effectiveDate = parsedDate.toLocaleDateString('id-ID', {
+          day: 'numeric',
+          month: 'long',
+          year: 'numeric',
+        });
+      }
+    } catch {
+      // fallback
+    }
+  }
+
+  // Otorisasi: Hanya Wali Kelas resmi dari kelas bersangkutan yang berwenang mengedit
+  const isAuthorizedHomeroomTeacher = Boolean(
+    currentClass &&
+    (
+      (currentUser.role === 'wali_kelas' && (currentUser.classId === currentClass.id || homeroomInfo?.classId === currentClass.id)) ||
+      (currentUser.role === 'guru' && homeroomInfo?.isHomeroom && (homeroomInfo.classId === currentClass.id || currentClass.homeroomTeacherId === currentUser.id))
+    )
+  );
+
   const getStudentHomeroomNote = (studentId: string, studentName: string) => {
     if (homeroomNotes[studentId]) return homeroomNotes[studentId];
     return `Ananda ${studentName} menunjukkan perkembangan belajar yang positif pada Semester ${selectedSemester}. Pertahankan motivasi dan terus kembangkan potensi diri.`;
   };
 
   const handleUpdateNote = (studentId: string, note: string) => {
+    if (!isAuthorizedHomeroomTeacher) {
+      alert(`Hanya Wali Kelas resmi (${currentClass?.homeroomTeacherName || currentClass?.name}) yang berwenang mengedit Catatan Perkembangan Karakter & Motivasi.`);
+      return;
+    }
     setHomeroomNotes((prev) => ({
       ...prev,
       [studentId]: note,
@@ -86,9 +215,40 @@ export const HomeroomReportView: React.FC = () => {
   };
 
   // Subjects applicable for this class
+  // Hanya mapel yang terintegrasi dengan kelas bersangkutan (sesuai pengaturan Admin / Wakasek Kurikulum)
   const classSubjects = useMemo(() => {
-    const gradeLevel = currentClass?.grade || 'X';
-    return allSubjects.filter((s) => !s.grade || s.grade === gradeLevel || s.grade === 'Semua');
+    if (!currentClass) return [];
+    const gradeLevel = currentClass.grade || 'X';
+    const schedulesInClass = DataService.getSchedule().filter((sc) => sc.classId === currentClass.id);
+    const scheduledSubjectIds = new Set(schedulesInClass.map((sc) => sc.subjectId));
+    const scheduledSubjectNames = new Set(schedulesInClass.map((sc) => sc.subjectName.toLowerCase()));
+
+    return allSubjects.filter((s) => {
+      // 1. Jika mapel secara spesifik diatur memiliki daftar classIds oleh Admin/Wakasek:
+      if (s.classIds && s.classIds.length > 0) {
+        return s.classIds.includes(currentClass.id);
+      }
+      // 2. Jika mapel terjadwal dalam jadwal resmi rombel ini:
+      if (scheduledSubjectIds.has(s.id) || scheduledSubjectNames.has(s.name.toLowerCase())) {
+        return true;
+      }
+      // 3. Mapel umum se-tingkat kelas yang tidak dibatasi kelas lain dan sesuai jurusan
+      if (!s.grade || s.grade === gradeLevel || s.grade === 'Semua') {
+        const lowerName = s.name.toLowerCase();
+        const code = s.code.toUpperCase();
+        if (currentClass.major === 'MIPA') {
+          if (code.includes('IPS') || lowerName.includes('geografi') || lowerName.includes('sosiologi') || lowerName.includes('ekonomi')) {
+            return false;
+          }
+        } else if (currentClass.major === 'IPS') {
+          if (code.includes('MIPA') || lowerName.includes('fisika') || lowerName.includes('kimia') || lowerName.includes('biologi')) {
+            return false;
+          }
+        }
+        return true;
+      }
+      return false;
+    });
   }, [allSubjects, currentClass]);
 
   // Compute Full Grades & Competency per student & subject
@@ -127,16 +287,50 @@ export const HomeroomReportView: React.FC = () => {
         subjectCount++;
 
         const isPassing = finalScore >= sub.kkm;
-        let competencyDescription = '';
-        if (finalScore >= 90) {
-          competencyDescription = `Menunjukkan penguasaan yang sangat memuaskan dalam memahami konsep inti, penalaran analitis, serta penerapan kontekstual pada materi ${sub.name}.`;
-        } else if (finalScore >= 80) {
-          competencyDescription = `Menunjukkan penguasaan yang baik dan tuntas dalam mencapai tujuan pembelajaran serta penyelesaian tugas praktis ${sub.name}.`;
-        } else if (isPassing) {
-          competencyDescription = `Mencapai kriteria ketuntasan minimal dalam memahami materi dasar ${sub.name}, perlu peningkatan dalam ketelitian latihan soal.`;
+
+        // Capaian Pembelajaran & ATP terintegrasi dari Guru Mata Pelajaran (Kurikulum Merdeka)
+        const subjectCPs = allLearningObjectives.filter(
+          (lo) => lo.subjectId === sub.id || lo.subjectName.toLowerCase() === sub.name.toLowerCase()
+        );
+
+        let masteredTopic = '';
+        let improvementTopic = '';
+
+        if (subjectCPs.length >= 2) {
+          if (finalScore >= 88) {
+            masteredTopic = `${subjectCPs[0].title} dan ${subjectCPs[1].title}`;
+            improvementTopic = subjectCPs[2]?.title || 'penerapan variasi materi pengayaan';
+          } else if (finalScore >= 75) {
+            masteredTopic = subjectCPs[0].title;
+            improvementTopic = subjectCPs[1]?.title || 'analisis konsep lanjutan';
+          } else {
+            masteredTopic = `konsep awal ${subjectCPs[0].title}`;
+            improvementTopic = `${subjectCPs[0].title} secara komprehensif dan ${subjectCPs[1]?.title || 'penerapan rumus dasar'}`;
+          }
+        } else if (subjectCPs.length === 1) {
+          if (finalScore >= 75) {
+            masteredTopic = subjectCPs[0].title;
+            improvementTopic = 'pengembangan studi kasus analitis mandiri';
+          } else {
+            masteredTopic = `konsep dasar ${subjectCPs[0].title}`;
+            improvementTopic = `pemahaman mendalam dan penerapan praktis ${subjectCPs[0].title}`;
+          }
         } else {
-          competencyDescription = `Perlu bimbingan dan perbaikan (remedial) dalam pemahaman konsep fundamental materi ${sub.name}.`;
+          // Fallback representatif jika CP belum ditambahkan guru mapel
+          if (finalScore >= 85) {
+            masteredTopic = `konsep inti dan penerapan kontekstual ${sub.name}`;
+            improvementTopic = 'pengayaan materi komparatif';
+          } else if (finalScore >= 75) {
+            masteredTopic = `prosedur kerja dan pemahaman dasar ${sub.name}`;
+            improvementTopic = 'analisis kritis dan penalaran tingkat lanjut';
+          } else {
+            masteredTopic = `definisi awal materi ${sub.name}`;
+            improvementTopic = `prosedur pemecahan masalah dan konsep fundamental ${sub.name}`;
+          }
         }
+
+        // Format resmi sesuai permintaan: Menunjukkan penguasaan dalam memahami ...., namun masih perlu penguasaan mengenai ...
+        const competencyDescription = `Menunjukkan penguasaan dalam memahami ${masteredTopic}, namun masih perlu penguasaan mengenai ${improvementTopic}.`;
 
         return {
           subjectId: sub.id,
@@ -538,31 +732,91 @@ export const HomeroomReportView: React.FC = () => {
 
                 {/* Section B: Ekstrakurikuler & Kehadiran */}
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  {/* Ekstrakurikuler */}
+                  {/* Ekstrakurikuler Dinamis (Kelola oleh Wali Kelas) */}
                   <div className="border border-slate-200 dark:border-slate-800 rounded-lg p-3.5 space-y-2">
-                    <h4 className="text-xs font-bold text-slate-900 dark:text-white uppercase tracking-wider flex items-center gap-1.5">
-                      <Sparkles className="w-3.5 h-3.5 text-amber-500" />
-                      <span>B. Kegiatan Ekstrakurikuler</span>
-                    </h4>
-                    <table className="w-full text-xs">
-                      <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
-                        <tr>
-                          <td className="py-1.5 font-semibold text-slate-900 dark:text-white">1. Pramuka (Wajib)</td>
-                          <td className="py-1.5 font-bold text-emerald-600 text-center">Sangat Baik</td>
-                          <td className="py-1.5 text-[11px] text-slate-500">Aktif memimpin regu</td>
-                        </tr>
-                        <tr>
-                          <td className="py-1.5 font-semibold text-slate-900 dark:text-white">2. Robotik & Coding</td>
-                          <td className="py-1.5 font-bold text-indigo-600 text-center">Sangat Baik</td>
-                          <td className="py-1.5 text-[11px] text-slate-500">Juara 2 Tingkat Kota</td>
-                        </tr>
-                        <tr>
-                          <td className="py-1.5 font-semibold text-slate-900 dark:text-white">3. Palang Merah Remaja</td>
-                          <td className="py-1.5 font-bold text-slate-700 text-center">Baik</td>
-                          <td className="py-1.5 text-[11px] text-slate-500">Berpartisipasi aktif</td>
-                        </tr>
-                      </tbody>
-                    </table>
+                    <div className="flex items-center justify-between">
+                      <h4 className="text-xs font-bold text-slate-900 dark:text-white uppercase tracking-wider flex items-center gap-1.5">
+                        <Sparkles className="w-3.5 h-3.5 text-amber-500" />
+                        <span>B. Kegiatan Ekstrakurikuler</span>
+                      </h4>
+                      {isHomeroomTeacher && (
+                        <button
+                          type="button"
+                          onClick={() => handleOpenAddExtra(activeStudentReport.studentId, activeStudentReport.name)}
+                          className="inline-flex items-center gap-1 px-2.5 py-1 rounded bg-amber-500 hover:bg-amber-600 text-white font-semibold text-[11px] cursor-pointer shadow-xs transition-colors"
+                          title="Tambah Catatan Ekstrakurikuler Siswa Ini"
+                        >
+                          <Plus className="w-3 h-3" />
+                          <span>Tambah Ekskul</span>
+                        </button>
+                      )}
+                    </div>
+
+                    {extracurriculars.filter((ex) => ex.studentId === activeStudentReport.studentId).length === 0 ? (
+                      <p className="text-[11px] text-slate-400 py-4 text-center italic">
+                        Belum ada kegiatan ekstrakurikuler yang dicatat untuk siswa ini.
+                      </p>
+                    ) : (
+                      <div className="overflow-x-auto">
+                        <table className="w-full text-xs">
+                          <thead>
+                            <tr className="text-slate-400 text-[10px] border-b border-slate-100 dark:border-slate-800 text-left">
+                              <th className="py-1">Kegiatan</th>
+                              <th className="py-1 text-center w-20">Predikat</th>
+                              <th className="py-1">Keterangan</th>
+                              {isHomeroomTeacher && <th className="py-1 text-right w-14">Aksi</th>}
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+                            {extracurriculars
+                              .filter((ex) => ex.studentId === activeStudentReport.studentId)
+                              .map((ex, idx) => (
+                                <tr key={ex.id}>
+                                  <td className="py-2 font-semibold text-slate-900 dark:text-white">
+                                    {idx + 1}. {ex.activityName}
+                                  </td>
+                                  <td className="py-2 font-bold text-center">
+                                    <span
+                                      className={`px-1.5 py-0.5 rounded text-[10px] ${
+                                        ex.predicate === 'Sangat Baik'
+                                          ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300'
+                                          : ex.predicate === 'Baik'
+                                          ? 'bg-blue-100 text-blue-800 dark:bg-blue-950 dark:text-blue-300'
+                                          : 'bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300'
+                                      }`}
+                                    >
+                                      {ex.predicate}
+                                    </span>
+                                  </td>
+                                  <td className="py-2 text-[11px] text-slate-600 dark:text-slate-400 leading-snug">
+                                    {ex.description}
+                                  </td>
+                                  {isHomeroomTeacher && (
+                                    <td className="py-2 text-right space-x-1 shrink-0">
+                                      <button
+                                        type="button"
+                                        onClick={() => handleOpenEditExtra(ex)}
+                                        className="p-1 rounded text-slate-400 hover:text-indigo-600 hover:bg-slate-100 dark:hover:bg-slate-800 cursor-pointer"
+                                        title="Ubah Ekstrakurikuler"
+                                      >
+                                        <Edit2 className="w-3.5 h-3.5" />
+                                      </button>
+                                      <button
+                                        type="button"
+                                        onClick={() => handleDeleteExtra(ex.id, ex.activityName)}
+                                        className="p-1 rounded text-slate-400 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/40 cursor-pointer"
+                                        title="Hapus Ekstrakurikuler"
+                                      >
+                                        <Trash2 className="w-3.5 h-3.5" />
+                                      </button>
+                                    </td>
+                                  )}
+                                </tr>
+                              ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    )}
                   </div>
 
                   {/* Kehadiran Terpadu */}
@@ -588,21 +842,37 @@ export const HomeroomReportView: React.FC = () => {
                   </div>
                 </div>
 
-                {/* Section D: Catatan Wali Kelas (Editable by Wali Kelas) */}
+                {/* Section D: Catatan Wali Kelas (Hanya Wali Kelas Bersangkutan yang Berwenang Mengedit) */}
                 <div className="border border-indigo-100 dark:border-indigo-900/60 rounded-xl p-4 bg-indigo-50/40 dark:bg-indigo-950/20 space-y-2">
-                  <div className="flex items-center justify-between">
+                  <div className="flex items-center justify-between flex-wrap gap-2">
                     <h4 className="text-xs font-bold text-indigo-950 dark:text-indigo-200 uppercase tracking-wider flex items-center gap-1.5">
                       <Edit3 className="w-3.5 h-3.5 text-indigo-600" />
                       <span>D. Catatan Perkembangan Karakter & Motivasi dari Wali Kelas</span>
                     </h4>
-                    <span className="text-[10px] text-indigo-600 font-semibold">Dapat disunting langsung oleh Wali Kelas</span>
+                    {isAuthorizedHomeroomTeacher ? (
+                      <span className="text-[10px] text-emerald-700 dark:text-emerald-300 font-bold flex items-center gap-1 bg-emerald-50 dark:bg-emerald-950/80 px-2.5 py-0.5 rounded-full border border-emerald-200 dark:border-emerald-800">
+                        <CheckCircle2 className="w-3 h-3 text-emerald-600" />
+                        <span>Wali Kelas Resmi (Akses Edit Aktif)</span>
+                      </span>
+                    ) : (
+                      <span className="text-[10px] text-amber-700 dark:text-amber-300 font-semibold flex items-center gap-1 bg-amber-50 dark:bg-amber-950/80 px-2.5 py-0.5 rounded-full border border-amber-200 dark:border-amber-800">
+                        <Lock className="w-3 h-3 text-amber-600" />
+                        <span>Khusus Wali Kelas {currentClass?.name} ({currentClass?.homeroomTeacherName}) — Akun Anda Hanya Dapat Melihat</span>
+                      </span>
+                    )}
                   </div>
                   <textarea
                     rows={3}
+                    disabled={!isAuthorizedHomeroomTeacher}
+                    readOnly={!isAuthorizedHomeroomTeacher}
                     value={getStudentHomeroomNote(activeStudentReport.studentId, activeStudentReport.name)}
                     onChange={(e) => handleUpdateNote(activeStudentReport.studentId, e.target.value)}
                     placeholder="Tuliskan catatan apresiasi, motivasi, dan arahan perkembangan belajar peserta didik..."
-                    className="w-full px-3 py-2 rounded-lg border border-indigo-200 dark:border-indigo-800 bg-white dark:bg-slate-900 text-slate-900 dark:text-white text-xs leading-relaxed"
+                    className={`w-full px-3 py-2 rounded-lg border text-xs leading-relaxed transition-all ${
+                      isAuthorizedHomeroomTeacher
+                        ? 'border-indigo-200 dark:border-indigo-800 bg-white dark:bg-slate-900 text-slate-900 dark:text-white focus:outline-indigo-500'
+                        : 'border-slate-200 dark:border-slate-800 bg-slate-100/80 dark:bg-slate-800/60 text-slate-500 dark:text-slate-400 cursor-not-allowed select-none'
+                    }`}
                   ></textarea>
                 </div>
               </div>
@@ -718,18 +988,56 @@ export const HomeroomReportView: React.FC = () => {
         </div>
       )}
 
-      {/* PRINT MODAL: RAPOR HASIL BELAJAR SISWA (A4) */}
+      {/* PRINT MODAL: RAPOR HASIL BELAJAR SISWA (FORMAT F4 FOLIO) */}
       <PrintModal
         isOpen={printRaporOpen}
         onClose={() => setPrintRaporOpen(false)}
-        title="Cetak Rapor Akhir Hasil Belajar (Kurikulum Merdeka)"
+        title="Cetak Rapor Akhir Hasil Belajar (Standar F4 Kurikulum Merdeka)"
         documentTitle="LAPORAN HASIL BELAJAR PESERTA DIDIK"
-        documentNumber={`421.6 / RAPOR / ${currentClass.name.replace(/\s+/g, '')} / ${selectedSemester.toUpperCase()} / 2024`}
-        leftSignerTitle="Orang Tua / Wali Murid"
-        leftSignerName={activeStudentReport?.parentName || '...........................................'}
-        rightSignerTitle="Wali Kelas"
-        rightSignerName={currentUser.role === 'wali_kelas' ? currentUser.name : (currentClass.homeroomTeacherName || 'Budi Santoso, S.Si.')}
-        rightSignerNip={currentUser.role === 'wali_kelas' ? (currentUser.nipOrNisn || '19820311 200801 1 007') : '19820311 200801 1 007'}
+        hideDocumentNumber={true}
+        hideDefaultSignatures={true}
+        customSignatureBlock={
+          <div
+            className="signature-block avoid-page-break pt-8 text-xs text-slate-900"
+            style={{ breakInside: 'avoid', pageBreakInside: 'avoid' }}
+          >
+            {/* Row 1: Orang Tua/Wali (Kiri) & Tempat/Tanggal Sejajar Wali Kelas (Kanan) */}
+            <div className="grid grid-cols-2 gap-8 text-center">
+              {/* Kolom Kiri: Orang Tua / Wali (Nama Dikosongkan) */}
+              <div>
+                <p className="invisible">Spacer</p>
+                <p className="font-medium text-slate-700">Mengetahui,</p>
+                <p className="font-medium text-slate-700">Orang Tua / Wali Peserta Didik</p>
+                <div className="h-20"></div>
+                <p className="font-bold text-slate-900">( .................................................. )</p>
+              </div>
+
+              {/* Kolom Kanan: Tempat, Tanggal Dokumen Sejajar dengan Wali Kelas */}
+              <div>
+                <p className="text-slate-700">
+                  {profile.city}, {effectiveDate}
+                </p>
+                <p className="font-medium text-slate-700">Wali Kelas,</p>
+                <div className="h-20"></div>
+                <p className="font-bold underline text-slate-900">
+                  {currentUser.role === 'wali_kelas' ? currentUser.name : (currentClass.homeroomTeacherName || 'Budi Santoso, S.Si.')}
+                </p>
+                <p className="text-[11px] font-mono text-slate-600">
+                  NIP. {currentUser.role === 'wali_kelas' ? (currentUser.nipOrNisn || '19820311 200801 1 007') : '19820311 200801 1 007'}
+                </p>
+              </div>
+            </div>
+
+            {/* Row 2: Mengetahui Kepala Sekolah di Tengah Bawah */}
+            <div className="mt-8 text-center">
+              <p className="font-medium text-slate-700">Mengetahui,</p>
+              <p className="font-medium text-slate-700">Kepala Sekolah {profile.name}</p>
+              <div className="h-20"></div>
+              <p className="font-bold underline text-slate-900">{profile.principalName}</p>
+              <p className="text-[11px] font-mono text-slate-600">NIP. {profile.principalNip}</p>
+            </div>
+          </div>
+        }
       >
         {activeStudentReport && (
           <div className="space-y-4 text-xs">
@@ -784,25 +1092,36 @@ export const HomeroomReportView: React.FC = () => {
                       <th className="border border-black py-1 px-1 text-center w-8">No</th>
                       <th className="border border-black py-1 px-2 text-left">Kegiatan Ekstrakurikuler</th>
                       <th className="border border-black py-1 px-2 text-center w-20">Predikat</th>
+                      <th className="border border-black py-1 px-2 text-left">Keterangan</th>
                     </tr>
                   </thead>
                   <tbody>
-                    <tr>
-                      <td className="border border-black py-1 px-1 text-center font-mono">1</td>
-                      <td className="border border-black py-1 px-2">Pramuka (Wajib)</td>
-                      <td className="border border-black py-1 px-2 text-center font-bold">Sangat Baik</td>
-                    </tr>
-                    <tr>
-                      <td className="border border-black py-1 px-1 text-center font-mono">2</td>
-                      <td className="border border-black py-1 px-2">Robotik & Sains</td>
-                      <td className="border border-black py-1 px-2 text-center font-bold">Sangat Baik</td>
-                    </tr>
+                    {extracurriculars.filter((ex) => ex.studentId === activeStudentReport.studentId).length === 0 ? (
+                      <tr>
+                        <td colSpan={4} className="border border-black py-2 px-2 text-center text-slate-500 italic">
+                          Tidak ada kegiatan ekstrakurikuler yang diikuti pada semester ini.
+                        </td>
+                      </tr>
+                    ) : (
+                      extracurriculars
+                        .filter((ex) => ex.studentId === activeStudentReport.studentId)
+                        .map((ex, idx) => (
+                          <tr key={ex.id}>
+                            <td className="border border-black py-1 px-1 text-center font-mono">{idx + 1}</td>
+                            <td className="border border-black py-1 px-2 font-medium">{ex.activityName}</td>
+                            <td className="border border-black py-1 px-2 text-center font-bold">{ex.predicate}</td>
+                            <td className="border border-black py-1 px-2 text-[11px] leading-tight">{ex.description}</td>
+                          </tr>
+                        ))
+                    )}
                   </tbody>
                 </table>
               </div>
 
               <div>
-                <p className="font-bold mb-1">C. Ketidakhadiran</p>
+                <p className="font-bold mb-1">
+                  C. Ketidakhadiran (Alokasi: {effectiveWeeksConfig.effectiveDays} Hari Efektif / {effectiveWeeksConfig.effectiveWeeks} Minggu KBM)
+                </p>
                 <table className="w-full border-collapse border border-black text-xs">
                   <tbody>
                     <tr>
@@ -835,15 +1154,6 @@ export const HomeroomReportView: React.FC = () => {
               {selectedSemester === 'Genap'
                 ? `Keputusan: Berdasarkan pencapaian seluruh tujuan pembelajaran, peserta didik dinyatakan: NAIK KE KELAS ${currentClass.grade === 'X' ? 'XI (Sebelas)' : 'XII (Dua Belas)'}.`
                 : `Keputusan: Peserta didik memenuhi target capaian kompetensi Semester Ganjil dan melanjutkan ke Semester Genap.`}
-            </div>
-
-            {/* Extra Signer for Principal in center */}
-            <div className="pt-2 text-center">
-              <p>Mengetahui,</p>
-              <p className="font-semibold">Kepala Sekolah</p>
-              <div className="h-16"></div>
-              <p className="font-bold underline">{profile.principalName}</p>
-              <p>NIP. {profile.principalNip}</p>
             </div>
           </div>
         )}
@@ -924,6 +1234,122 @@ export const HomeroomReportView: React.FC = () => {
           </div>
         </div>
       </PrintModal>
+
+      {/* MODAL: KELOLA EKSTRAKURIKULER (KHUSUS WALI KELAS) */}
+      {isExtraModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs p-4 overflow-y-auto">
+          <div className="bg-white dark:bg-slate-900 rounded-2xl max-w-lg w-full p-6 border border-slate-200 dark:border-slate-800 shadow-2xl space-y-4 my-auto animate-in fade-in zoom-in-95 duration-150">
+            <div className="flex items-center justify-between pb-3 border-b border-slate-100 dark:border-slate-800">
+              <div className="flex items-center gap-2">
+                <Sparkles className="w-5 h-5 text-amber-500" />
+                <div>
+                  <h3 className="text-sm font-bold text-slate-900 dark:text-white">
+                    {editingExtraId ? 'Ubah Data Ekstrakurikuler' : 'Tambah Ekstrakurikuler Siswa Binaan'}
+                  </h3>
+                  <p className="text-[11px] text-slate-500">
+                    Khusus Wali Kelas {currentClass.name} untuk Rapor Hasil Belajar Kurikulum Merdeka
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsExtraModalOpen(false)}
+                className="p-1 rounded-lg text-slate-400 hover:text-slate-600 hover:bg-slate-100 dark:hover:bg-slate-800 cursor-pointer"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <form onSubmit={handleSaveExtra} className="space-y-3.5 text-xs">
+              <div>
+                <label className="block text-slate-600 dark:text-slate-400 font-semibold mb-1">
+                  Pilih Peserta Didik (Kelas {currentClass.name})
+                </label>
+                <select
+                  required
+                  value={extraForm.studentId}
+                  onChange={(e) => {
+                    const found = classStudents.find((s) => s.id === e.target.value);
+                    setExtraForm({
+                      ...extraForm,
+                      studentId: e.target.value,
+                      studentName: found?.name || '',
+                    });
+                  }}
+                  className="w-full px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white cursor-pointer"
+                >
+                  {classStudents.map((s) => (
+                    <option key={s.id} value={s.id}>
+                      {s.name} (NISN: {s.nisn})
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-slate-600 dark:text-slate-400 font-semibold mb-1">
+                  Nama Kegiatan Ekstrakurikuler
+                </label>
+                <input
+                  type="text"
+                  required
+                  placeholder="Contoh: Pramuka (Wajib), Paskibra, PMR, Rohis, Basket, Futsal, Robotik, KIR"
+                  value={extraForm.activityName}
+                  onChange={(e) => setExtraForm({ ...extraForm, activityName: e.target.value })}
+                  className="w-full px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white"
+                />
+              </div>
+
+              <div>
+                <label className="block text-slate-600 dark:text-slate-400 font-semibold mb-1">
+                  Predikat Capaian
+                </label>
+                <select
+                  value={extraForm.predicate}
+                  onChange={(e) => setExtraForm({ ...extraForm, predicate: e.target.value as ExtracurricularPredicate })}
+                  className="w-full px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white cursor-pointer font-semibold"
+                >
+                  <option value="Sangat Baik">Sangat Baik (A)</option>
+                  <option value="Baik">Baik (B)</option>
+                  <option value="Cukup">Cukup (C)</option>
+                  <option value="Kurang">Kurang (D)</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-slate-600 dark:text-slate-400 font-semibold mb-1">
+                  Deskripsi / Keterangan Capaian Kompetensi
+                </label>
+                <textarea
+                  rows={3}
+                  required
+                  placeholder="Contoh: Sangat aktif memimpin regu, berdisiplin tinggi dalam baris-berbaris dan kegiatan perkemahan."
+                  value={extraForm.description}
+                  onChange={(e) => setExtraForm({ ...extraForm, description: e.target.value })}
+                  className="w-full px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white leading-relaxed"
+                ></textarea>
+              </div>
+
+              <div className="flex items-center justify-end gap-2 pt-3 border-t border-slate-100 dark:border-slate-800">
+                <button
+                  type="button"
+                  onClick={() => setIsExtraModalOpen(false)}
+                  className="px-4 py-2 rounded-lg text-slate-600 hover:bg-slate-100 dark:hover:bg-slate-800 font-medium cursor-pointer"
+                >
+                  Batal
+                </button>
+                <button
+                  type="submit"
+                  className="px-4 py-2 rounded-lg bg-amber-500 hover:bg-amber-600 text-white font-semibold flex items-center gap-1.5 cursor-pointer shadow-xs"
+                >
+                  <Check className="w-4 h-4" />
+                  <span>Simpan Ekstrakurikuler</span>
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

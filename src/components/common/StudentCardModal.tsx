@@ -34,7 +34,7 @@ export const StudentCardModal: React.FC<StudentCardModalProps> = ({
 
   const renderFrontCard = () => (
     <div
-      className="student-id-card bg-gradient-to-br from-slate-950 via-indigo-950 to-indigo-900 text-white rounded-2xl p-4 sm:p-5 shadow-2xl border-2 border-indigo-400/50 text-xs relative overflow-hidden w-full max-w-[420px] mx-auto select-none"
+      className="student-id-card bg-gradient-to-br from-slate-950 via-indigo-950 to-indigo-900 text-white rounded-2xl p-4 sm:p-5 shadow-2xl border-2 border-indigo-400/50 text-xs relative overflow-hidden w-full max-w-[420px] h-[270px] min-h-[270px] max-h-[270px] mx-auto select-none flex flex-col justify-between"
       style={{
         WebkitPrintColorAdjust: 'exact',
         printColorAdjust: 'exact',
@@ -146,11 +146,11 @@ export const StudentCardModal: React.FC<StudentCardModalProps> = ({
           </p>
         </div>
         <div className="text-right">
-          <p className="text-[8px] text-slate-300">Kepala Sekolah,</p>
-          <p className="font-bold underline text-white mt-1 text-[9px] leading-tight">
-            {profile.principalName}
-          </p>
-          <p className="font-mono text-[7px] text-slate-300">NIP. {profile.principalNip}</p>
+          <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[9px] font-semibold bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
+            <span className="w-1.5 h-1.5 rounded-full bg-emerald-400"></span>
+            Kartu Pelajar Aktif
+          </span>
+          <p className="text-[8px] text-indigo-300 mt-1 font-medium">{profile.name}</p>
         </div>
       </div>
     </div>
@@ -158,11 +158,10 @@ export const StudentCardModal: React.FC<StudentCardModalProps> = ({
 
   const renderBackCard = () => (
     <div
-      className="student-id-card bg-gradient-to-br from-slate-950 via-slate-900 to-indigo-950 text-white rounded-2xl p-4 sm:p-5 shadow-2xl border-2 border-indigo-400/50 text-xs relative overflow-hidden w-full max-w-[420px] mx-auto select-none flex flex-col justify-between"
+      className="student-id-card bg-gradient-to-br from-slate-950 via-slate-900 to-indigo-950 text-white rounded-2xl p-4 sm:p-5 shadow-2xl border-2 border-indigo-400/50 text-xs relative overflow-hidden w-full max-w-[420px] h-[270px] min-h-[270px] max-h-[270px] mx-auto select-none flex flex-col justify-between"
       style={{
         WebkitPrintColorAdjust: 'exact',
         printColorAdjust: 'exact',
-        minHeight: '228px',
       }}
     >
       <div className="relative z-10">

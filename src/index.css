@@ -1,5 +1,7 @@
 @import "tailwindcss";
 
+@custom-variant dark (&:where(.dark, .dark *));
+
 @layer base {
   :root {
     font-family: 'Plus Jakarta Sans', system-ui, -apple-system, sans-serif;
@@ -80,7 +82,7 @@
     display: block !important;
   }
 
-  /* 1. Official Letterhead Documents (F4 / Folio Sheet Format) */
+  /* 1. Official Letterhead Documents (F4 / Folio Sheet Format: 215 mm x 330 mm) */
   .print-page.official-paper,
   .print-page {
     box-shadow: none !important;
@@ -95,20 +97,35 @@
     display: block !important;
   }
 
-  /* 2. Kartu Tanda Pelajar (Student ID Card) - Preserve Colors, Card Dimensions, Photo, and Borders */
+  /* Multi-page and signature block protection */
+  .signature-block,
+  .avoid-page-break,
+  .print-signature-section {
+    page-break-inside: avoid !important;
+    break-inside: avoid !important;
+    -webkit-column-break-inside: avoid !important;
+  }
+
+  /* 2. Kartu Tanda Pelajar (Student ID Card) - Preserve Colors, Identical Dimensions, Photo, and Borders */
   .student-id-card {
     box-shadow: none !important;
     width: 95mm !important;
     max-width: 95mm !important;
+    height: 58mm !important;
     min-height: 58mm !important;
+    max-height: 58mm !important;
     margin: 0 auto !important;
-    padding: 16px !important;
+    padding: 12px 16px !important;
     border: 2px solid #6366f1 !important;
     border-radius: 16px !important;
     background: linear-gradient(135deg, #020617 0%, #0f172a 40%, #1e1b4b 75%, #312e81 100%) !important;
     color: #ffffff !important;
-    display: block !important;
+    display: flex !important;
+    flex-direction: column !important;
+    justify-content: space-between !important;
     page-break-inside: avoid !important;
+    break-inside: avoid !important;
+    box-sizing: border-box !important;
     -webkit-print-color-adjust: exact !important;
     print-color-adjust: exact !important;
   }
@@ -120,6 +137,7 @@
     display: inline-block !important;
     margin: 12px auto !important;
     page-break-inside: avoid !important;
+    break-inside: avoid !important;
     background: transparent !important;
   }
 
@@ -131,13 +149,13 @@
     align-items: center !important;
     gap: 20px !important;
     margin: 1.5cm auto !important;
-    max-width: 210mm !important;
+    max-width: 215mm !important;
     background: transparent !important;
   }
 
   @page {
-    size: auto;
-    margin: 1.2cm 1.5cm 1.2cm 1.5cm;
+    size: 215mm 330mm;
+    margin: 15mm 18mm 15mm 18mm;
   }
 
   table {
@@ -146,6 +164,7 @@
 
   tr {
     page-break-inside: avoid;
+    break-inside: avoid;
     page-break-after: auto;
   }
 

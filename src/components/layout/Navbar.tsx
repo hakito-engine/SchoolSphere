@@ -39,16 +39,52 @@ export const Navbar: React.FC<NavbarProps> = ({
   const [notifications, setNotifications] = useState(() => DataService.getNotifications());
   const [showNotifications, setShowNotifications] = useState(false);
 
+  // Requirement 9: Notifikasi Koreksi Nilai dari guru mapel hanya muncul di akun siswa yang dinilai
+  const visibleNotifications = notifications.filter((item) => {
+    const isGradeNotif = item.type === 'nilai' || item.title.toLowerCase().includes('nilai');
+    if (isGradeNotif || item.targetUserId || item.targetStudentId) {
+      if (currentUser.role !== 'siswa') {
+        // Guru, admin, kepsek, wali kelas, dll. tidak melihat notifikasi nilai privat siswa
+        return false;
+      }
+      const cleanUserId = currentUser.id.replace('usr-std-', '').replace('usr-siswa-', '');
+      const userNisn = currentUser.nipOrNisn?.replace(/\s+/g, '');
+      const studentData = DataService.getStudents().find(
+        (s) =>
+          s.id === cleanUserId ||
+          (userNisn && s.nisn === userNisn) ||
+          s.name.toLowerCase().replace(/[^a-z0-9]/g, '') === currentUser.username.toLowerCase().replace(/[^a-z0-9]/g, '')
+      );
+
+      const targetUser = item.targetUserId?.toLowerCase().trim();
+      const targetStudent = item.targetStudentId?.toLowerCase().trim();
+
+      const matchesTargetUser =
+        targetUser &&
+        (currentUser.id.toLowerCase() === targetUser ||
+          `usr-std-${cleanUserId}`.toLowerCase() === targetUser ||
+          (studentData && `usr-std-${studentData.id}`.toLowerCase() === targetUser));
+
+      const matchesTargetStudent =
+        targetStudent &&
+        (cleanUserId.toLowerCase() === targetStudent ||
+          (studentData && studentData.id.toLowerCase() === targetStudent));
+
+      return matchesTargetUser || matchesTargetStudent;
+    }
+    return true;
+  });
+
   // User menu and change password state
   const [showUserMenu, setShowUserMenu] = useState(false);
   const [showChangePassModal, setShowChangePassModal] = useState(false);
   const [newPasswordInput, setNewPasswordInput] = useState('');
   const [passNotice, setPassNotice] = useState<string | null>(null);
 
-  const unreadCount = notifications.filter((n) => !n.read).length;
+  const unreadCount = visibleNotifications.filter((n) => !n.read).length;
 
   const handleMarkAllRead = () => {
-    notifications.forEach((n) => DataService.markNotificationRead(n.id));
+    visibleNotifications.forEach((n) => DataService.markNotificationRead(n.id));
     setNotifications(DataService.getNotifications());
   };
 
@@ -155,12 +191,12 @@ export const Navbar: React.FC<NavbarProps> = ({
                 </div>
 
                 <div className="max-h-72 overflow-y-auto space-y-2">
-                  {notifications.length === 0 ? (
+                  {visibleNotifications.length === 0 ? (
                     <p className="text-xs text-center text-slate-400 py-4">
                       Belum ada notifikasi baru.
                     </p>
                   ) : (
-                    notifications.map((item) => (
+                    visibleNotifications.map((item) => (
                       <div
                         key={item.id}
                         className={`p-2.5 rounded-lg text-xs transition-colors ${

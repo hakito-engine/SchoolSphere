@@ -794,6 +794,124 @@ export const AssignmentsView: React.FC = () => {
         </div>
       </div>
 
+      {/* Khusus Siswa: Daftar Rekap Nilai Tugas Semua Mata Pelajaran */}
+      {isStudent && (
+        <div className="p-5 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-2xs space-y-4">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-3 border-b border-slate-100 dark:border-slate-800">
+            <div className="flex items-center gap-2">
+              <div className="p-2 rounded-lg bg-indigo-50 dark:bg-indigo-950 text-indigo-600">
+                <Award className="w-5 h-5" />
+              </div>
+              <div>
+                <h3 className="text-sm font-bold text-slate-900 dark:text-white">
+                  Daftar Nilai Tugas Saya (Semua Mata Pelajaran)
+                </h3>
+                <p className="text-xs text-slate-500">
+                  Transparansi seluruh nilai tugas mandiri Anda dari semua guru mata pelajaran. Hanya dapat diakses oleh akun Anda.
+                </p>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-2">
+              <span className="text-xs px-2.5 py-1 rounded-md font-mono font-bold bg-indigo-50 dark:bg-indigo-950 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800">
+                {assignments.length} Total Tugas
+              </span>
+            </div>
+          </div>
+
+          <div className="overflow-x-auto">
+            <table className="w-full text-xs text-left">
+              <thead>
+                <tr className="border-b border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-800/60 text-slate-600 dark:text-slate-400 font-semibold">
+                  <th className="py-2.5 px-3 w-10 text-center">No</th>
+                  <th className="py-2.5 px-3">Mata Pelajaran & Guru</th>
+                  <th className="py-2.5 px-3">Judul Tugas</th>
+                  <th className="py-2.5 px-3 text-center">Batas Waktu</th>
+                  <th className="py-2.5 px-3 text-center">Status Kirim</th>
+                  <th className="py-2.5 px-3 text-center font-mono">Nilai Saya</th>
+                  <th className="py-2.5 px-3 text-center font-mono">KKM</th>
+                  <th className="py-2.5 px-3 text-center">Ketuntasan</th>
+                  <th className="py-2.5 px-3">Catatan / Koreksi Guru</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+                {assignments.map((asg, idx) => {
+                  const subItem = submissions.find(
+                    (s) => s.assignmentId === asg.id && s.studentId === currentUser.id
+                  );
+                  const asgSubject = allSubjects.find((s) => s.id === asg.subjectId);
+                  const kkm = asgSubject?.kkm || 75;
+                  const hasSubmitted = !!subItem;
+                  const hasScore = subItem && subItem.score !== undefined && subItem.score !== null;
+                  const isPassed = hasScore && (subItem.score as number) >= kkm;
+
+                  return (
+                    <tr
+                      key={asg.id}
+                      onClick={() => setActiveAssignmentId(asg.id)}
+                      className={`hover:bg-indigo-50/30 dark:hover:bg-slate-800/40 transition-colors cursor-pointer ${
+                        asg.id === activeAssignmentId ? 'bg-indigo-50/60 dark:bg-indigo-950/40 font-medium' : ''
+                      }`}
+                    >
+                      <td className="py-2.5 px-3 text-center font-mono text-slate-400">{idx + 1}</td>
+                      <td className="py-2.5 px-3">
+                        <span className="font-bold text-slate-900 dark:text-white block">{asg.subjectName}</span>
+                        <span className="text-[10px] text-slate-500">{asg.teacherName}</span>
+                      </td>
+                      <td className="py-2.5 px-3 font-medium text-slate-800 dark:text-slate-200">
+                        {asg.title}
+                      </td>
+                      <td className="py-2.5 px-3 text-center font-mono text-[11px] text-slate-500">
+                        {asg.deadline}
+                      </td>
+                      <td className="py-2.5 px-3 text-center">
+                        {hasSubmitted ? (
+                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-50 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800">
+                            <Check className="w-3 h-3" /> Dikumpulkan
+                          </span>
+                        ) : (
+                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-bold bg-amber-50 dark:bg-amber-950 text-amber-700 dark:text-amber-300 border border-amber-200 dark:border-amber-800">
+                            <Clock className="w-3 h-3" /> Belum Kirim
+                          </span>
+                        )}
+                      </td>
+                      <td className="py-2.5 px-3 text-center font-mono font-bold text-xs">
+                        {hasScore ? (
+                          <span className={isPassed ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400'}>
+                            {subItem.score}
+                          </span>
+                        ) : (
+                          <span className="text-slate-400 font-normal">Belum Dinilai</span>
+                        )}
+                      </td>
+                      <td className="py-2.5 px-3 text-center font-mono text-slate-500">{kkm}</td>
+                      <td className="py-2.5 px-3 text-center">
+                        {hasScore ? (
+                          <span
+                            className={`px-2 py-0.5 rounded text-[10px] font-bold ${
+                              isPassed
+                                ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900 dark:text-emerald-200'
+                                : 'bg-rose-100 text-rose-800 dark:bg-rose-900 dark:text-rose-200'
+                            }`}
+                          >
+                            {isPassed ? 'Tuntas' : 'Remedial'}
+                          </span>
+                        ) : (
+                          <span className="text-slate-400 text-[10px]">-</span>
+                        )}
+                      </td>
+                      <td className="py-2.5 px-3 text-slate-600 dark:text-slate-400 text-[11px] max-w-xs truncate">
+                        {subItem?.feedback || '-'}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
       {/* MODAL: TABEL REKAP PENILAIAN MASING-MASING GURU MAPEL (SIAP CETAK) */}
       {recapModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
@@ -1044,14 +1162,14 @@ export const AssignmentsView: React.FC = () => {
         </div>
       </PrintModal>
 
-      {/* Modal Buat / Ubah Tugas */}
+      {/* Modal Buat / Ubah Tugas (Dengan fitur scrolling penuh) */}
       {isAddModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-          <div className="bg-white dark:bg-slate-900 rounded-xl max-w-lg w-full p-6 border border-slate-200 dark:border-slate-800 shadow-xl">
-            <h3 className="text-sm font-bold text-slate-900 dark:text-white mb-4">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 overflow-y-auto">
+          <div className="bg-white dark:bg-slate-900 rounded-xl max-w-xl w-full p-6 border border-slate-200 dark:border-slate-800 shadow-xl max-h-[90vh] flex flex-col my-auto">
+            <h3 className="text-sm font-bold text-slate-900 dark:text-white mb-3 shrink-0">
               {editingAssignment ? 'Ubah Tugas Pembelajaran' : 'Buat Penugasan Siswa Baru'}
             </h3>
-            <form onSubmit={handleCreateAssignment} className="space-y-3 text-xs">
+            <form onSubmit={handleCreateAssignment} className="space-y-3 text-xs overflow-y-auto pr-1">
               <div>
                 <label className="block text-slate-600 dark:text-slate-400 font-medium mb-1">
                   Judul Tugas
@@ -1302,7 +1420,7 @@ export const AssignmentsView: React.FC = () => {
         isOpen={printModalOpen}
         onClose={() => setPrintModalOpen(false)}
         title="Cetak Rekap Nilai Tugas"
-        documentTitle={`DAFTAR REKAPITULASI NILAI TUGAS`}
+        documentTitle={isStudent ? `LEMBAR HASIL PENILAIAN TUGAS PESERTA DIDIK` : `DAFTAR REKAPITULASI NILAI TUGAS`}
         documentNumber="421.6 / ASG / SMA-NU / X / 2024"
         leftSignerTitle="Guru Mata Pelajaran"
         leftSignerName={activeAssignment?.teacherName || currentUser.name}
@@ -1326,7 +1444,7 @@ export const AssignmentsView: React.FC = () => {
               </tr>
             </thead>
             <tbody>
-              {currentSubmissions.map((sub, i) => (
+              {(isStudent ? currentSubmissions.filter((s) => s.studentId === currentUser.id) : currentSubmissions).map((sub, i) => (
                 <tr key={sub.id}>
                   <td className="border border-black py-1 px-2 text-center font-mono">{i + 1}</td>
                   <td className="border border-black py-1 px-3 font-semibold">{sub.studentName}</td>

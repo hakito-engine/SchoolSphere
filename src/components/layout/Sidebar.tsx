@@ -50,7 +50,8 @@ export const Sidebar: React.FC<SidebarProps> = ({
   onSelectTab,
   onCloseMobile,
 }) => {
-  const { canAccess, roleInfo, currentUser } = useAuth();
+  const { canAccess, roleInfo, currentUser, homeroomInfo } = useAuth();
+  const isTeacherWithHomeroom = currentUser.role === 'guru' && !!homeroomInfo?.isHomeroom;
   const [isHovered, setIsHovered] = useState(false);
 
   // Auto-expand on cursor hover, or when pinned/opened via toggle
@@ -146,18 +147,26 @@ export const Sidebar: React.FC<SidebarProps> = ({
               <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">
                 Akses Aktif
               </span>
-              <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-md ${roleInfo.badgeColor}`}>
-                {roleInfo.label}
+              <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-md ${
+                isTeacherWithHomeroom
+                  ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300 border border-emerald-300'
+                  : roleInfo.badgeColor
+              }`}>
+                {isTeacherWithHomeroom ? 'Guru & Wali Kelas' : roleInfo.label}
               </span>
             </div>
             <p className="text-xs font-bold text-slate-900 dark:text-slate-100 truncate">
               {currentUser.name}
             </p>
-            {currentUser.classId && (
+            {isTeacherWithHomeroom && homeroomInfo.className ? (
+              <p className="text-[10px] text-emerald-600 dark:text-emerald-400 font-semibold mt-0.5">
+                Binaan: {homeroomInfo.className}
+              </p>
+            ) : currentUser.classId ? (
               <p className="text-[10px] text-slate-500 dark:text-slate-400 mt-0.5 font-mono">
                 Kelas: {currentUser.classId.replace('cls-', '').toUpperCase()}
               </p>
-            )}
+            ) : null}
           </div>
         ) : (
           <div className="py-3 flex justify-center">

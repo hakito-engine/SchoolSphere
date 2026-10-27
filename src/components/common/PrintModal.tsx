@@ -10,6 +10,9 @@ interface PrintModalProps {
   title: string;
   documentTitle: string;
   documentNumber?: string;
+  hideDocumentNumber?: boolean; // Khusus rapor & dokumen tanpa nomor surat
+  customSignatureBlock?: React.ReactNode; // Format tanda tangan kustom (misal Rapor 3 pihak)
+  hideDefaultSignatures?: boolean;
   children: React.ReactNode;
   rightSignerTitle?: string;
   rightSignerName?: string;
@@ -26,6 +29,9 @@ export const PrintModal: React.FC<PrintModalProps> = ({
   title,
   documentTitle,
   documentNumber,
+  hideDocumentNumber = false,
+  customSignatureBlock,
+  hideDefaultSignatures = false,
   children,
   rightSignerTitle,
   rightSignerName,
@@ -34,6 +40,10 @@ export const PrintModal: React.FC<PrintModalProps> = ({
   leftSignerName,
   leftSignerNip,
 }) => {
+  const profile = DataService.getSchoolProfile();
+  const [showLetterNumber, setShowLetterNumber] = React.useState<boolean>(
+    profile.showOfficialLetterNumber !== false
+  );
   useEffect(() => {
     if (!isOpen) return;
     document.body.classList.add('print-modal-open');
@@ -43,8 +53,6 @@ export const PrintModal: React.FC<PrintModalProps> = ({
   }, [isOpen]);
 
   if (!isOpen) return null;
-
-  const profile = DataService.getSchoolProfile();
 
   // Determine effective document date based on super admin configuration
   let effectiveDate = new Date().toLocaleDateString('id-ID', {
@@ -150,7 +158,7 @@ export const PrintModal: React.FC<PrintModalProps> = ({
       .replace(/\{NPSN\}/gi, profile.npsn || '10293847');
   };
 
-  const finalDocumentNumber = getEffectiveDocumentNumber();
+  const finalDocumentNumber = hideDocumentNumber || !showLetterNumber ? undefined : getEffectiveDocumentNumber();
 
   const handlePrint = () => {
     window.print();
@@ -160,15 +168,28 @@ export const PrintModal: React.FC<PrintModalProps> = ({
     <div className="print-modal-backdrop fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs p-4 overflow-y-auto">
       <div className="print-modal-dialog bg-white dark:bg-slate-900 rounded-xl shadow-2xl max-w-4xl w-full max-h-[92vh] flex flex-col overflow-hidden border border-slate-200 dark:border-slate-800 my-auto">
         {/* Modal Top Bar (Hidden when printing) */}
-        <div className="no-print flex items-center justify-between px-6 py-4 border-b border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-800/50">
+        <div className="no-print flex flex-wrap items-center justify-between gap-3 px-6 py-4 border-b border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-800/50">
           <div className="flex items-center gap-2">
             <Printer className="w-5 h-5 text-indigo-600 dark:text-indigo-400" />
             <span className="font-semibold text-slate-900 dark:text-slate-100">{title}</span>
             <span className="text-xs text-indigo-600 dark:text-indigo-400 font-mono bg-indigo-50 dark:bg-indigo-950 px-2 py-0.5 rounded">
-              Standar F4 (Folio 215 × 330 mm)
+              Ukuran F4 Folio (215 × 330 mm)
             </span>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-3">
+            {/* Toggle Aktifkan/Nonaktifkan Nomor Surat (Dikelola oleh Admin / Pengguna) */}
+            {!hideDocumentNumber && (
+              <label className="flex items-center gap-1.5 text-xs text-slate-700 dark:text-slate-300 font-medium cursor-pointer bg-white dark:bg-slate-800 px-2.5 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 select-none hover:bg-slate-50">
+                <input
+                  type="checkbox"
+                  checked={showLetterNumber}
+                  onChange={(e) => setShowLetterNumber(e.target.checked)}
+                  className="w-3.5 h-3.5 rounded text-indigo-600 focus:ring-indigo-500 cursor-pointer"
+                />
+                <span>Tampilkan Nomor Surat</span>
+              </label>
+            )}
+
             <button
               onClick={handlePrint}
               className="flex items-center gap-2 px-4 py-2 text-xs font-semibold text-white bg-indigo-600 hover:bg-indigo-700 rounded-lg shadow-sm transition-colors cursor-pointer"
@@ -205,29 +226,41 @@ export const PrintModal: React.FC<PrintModalProps> = ({
             {/* Document Content */}
             <div className="my-4">{children}</div>
 
-            {/* Signature Block (Kepala Sekolah di KIRI, Guru/Wali/BK di KANAN) */}
-            <div className="mt-12 pt-6 grid grid-cols-2 gap-8 text-center text-xs">
-              {/* Kiri: Kepala Sekolah */}
-              <div>
-                <p className="invisible">Spacer</p>
-                <p className="font-medium text-slate-700">Mengetahui,</p>
-                <p className="font-medium text-slate-700">Kepala Sekolah</p>
-                <div className="h-16"></div>
-                <p className="font-bold underline text-slate-900">{profile.principalName}</p>
-                <p className="text-[11px] font-mono text-slate-600">NIP. {profile.principalNip}</p>
+            {/* Signature Block (Anti Page-break: Tempat, Tanggal, Jabatan, Nama, NIP utuh tidak boleh terpisah halaman) */}
+            {customSignatureBlock ? (
+              <div
+                className="signature-block avoid-page-break mt-10 pt-4"
+                style={{ breakInside: 'avoid', pageBreakInside: 'avoid' }}
+              >
+                {customSignatureBlock}
               </div>
+            ) : !hideDefaultSignatures ? (
+              <div
+                className="signature-block avoid-page-break mt-12 pt-6 grid grid-cols-2 gap-8 text-center text-xs"
+                style={{ breakInside: 'avoid', pageBreakInside: 'avoid' }}
+              >
+                {/* Kiri: Kepala Sekolah */}
+                <div>
+                  <p className="invisible">Spacer</p>
+                  <p className="font-medium text-slate-700">Mengetahui,</p>
+                  <p className="font-medium text-slate-700">Kepala Sekolah</p>
+                  <div className="h-16"></div>
+                  <p className="font-bold underline text-slate-900">{profile.principalName}</p>
+                  <p className="text-[11px] font-mono text-slate-600">NIP. {profile.principalNip}</p>
+                </div>
 
-              {/* Kanan: Guru Mata Pelajaran / Wali Kelas / Guru BK */}
-              <div>
-                <p className="text-slate-700">
-                  {profile.city}, {effectiveDate}
-                </p>
-                <p className="font-medium text-slate-700">{finalRightTitle}</p>
-                <div className="h-20"></div>
-                <p className="font-bold underline text-slate-900">{finalRightName}</p>
-                <p className="text-[11px] font-mono text-slate-600">NIP. {finalRightNip}</p>
+                {/* Kanan: Guru Mata Pelajaran / Wali Kelas / Guru BK */}
+                <div>
+                  <p className="text-slate-700">
+                    {profile.city}, {effectiveDate}
+                  </p>
+                  <p className="font-medium text-slate-700">{finalRightTitle}</p>
+                  <div className="h-20"></div>
+                  <p className="font-bold underline text-slate-900">{finalRightName}</p>
+                  <p className="text-[11px] font-mono text-slate-600">NIP. {finalRightNip}</p>
+                </div>
               </div>
-            </div>
+            ) : null}
           </div>
         </div>
       </div>

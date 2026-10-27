@@ -23,6 +23,7 @@ export const AttendanceView: React.FC = () => {
   const allSubjects = DataService.getSubjects();
   const students = DataService.getStudents();
   const existingAttendances = DataService.getAttendance();
+  const effectiveWeeksConfig = DataService.getActiveEffectiveWeeks();
 
   // Filter subjects accessible:
   // Guru can only select & manage subjects they teach
@@ -174,7 +175,10 @@ export const AttendanceView: React.FC = () => {
     const finalA = totalFromRecords > 0 ? a : (std.attendance?.alpa || 0);
     const finalT = totalFromRecords > 0 ? t : (std.attendance?.terlambat || 1);
     const totalSesi = finalH + finalS + finalI + finalA + finalT;
-    const pct = totalSesi > 0 ? Math.round((finalH / totalSesi) * 100) : 0;
+
+    // Requirement 2: Dihitung menggunakan alokasi Minggu & Hari Efektif / Semester (Wakasek Kurikulum)
+    const effectiveDaysBase = effectiveWeeksConfig.effectiveDays > 0 ? effectiveWeeksConfig.effectiveDays : totalSesi;
+    const pct = effectiveDaysBase > 0 ? Math.min(100, Math.round((finalH / effectiveDaysBase) * 100)) : 0;
 
     // Requirement 5: Format rekapitulasi keterangan presensi dari guru mata pelajaran
     // Contoh: Ahmad Fauzi mempunyai rekap: 2 sakit (Rawat Inap), 1 alpa, 3 terlambat (motor rusak, terlambat bangun, macet)

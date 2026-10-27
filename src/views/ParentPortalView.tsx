@@ -66,17 +66,35 @@ export const ParentPortalView: React.FC<ParentPortalViewProps> = ({ initialTab =
   const canSendMessages = ['super_admin', 'guru_bk', 'wali_kelas', 'wakasek_kurikulum'].includes(currentUser.role);
   const canSendTeacherStudentMsg = ['super_admin', 'guru', 'wakasek_kurikulum'].includes(currentUser.role);
 
-  // Identified children strictly for the parent account
-  const myChildren = students.filter((s) => {
-    if (currentUser.id === s.parentId) return true;
-    if (currentUser.childrenIds && currentUser.childrenIds.includes(s.id)) return true;
-    if (currentUser.name && s.parentName && s.parentName.trim().toLowerCase() === currentUser.name.trim().toLowerCase()) return true;
-    // Demo fallback ONLY for default parent account 'usr-ortu-bambang'
-    if (currentUser.id === 'usr-ortu-bambang' && ['std-ahmad', 'std-siti'].includes(s.id)) return true;
-    return false;
-  });
+  // Identified children strictly for the parent account (Relasi terverifikasi Dapodik)
+  const myChildren = useMemo(() => {
+    if (currentUser.role !== 'orang_tua') return students;
+    return students.filter((s) => {
+      // 1. Explicit childrenIds array pada user
+      if (currentUser.childrenIds && currentUser.childrenIds.includes(s.id)) return true;
+      // 2. Direct parentId match
+      if (s.parentId && currentUser.id === s.parentId) return true;
+      // 3. Normalisasi nomor handphone orang tua
+      if (
+        currentUser.phone &&
+        s.parentPhone &&
+        currentUser.phone.replace(/[^0-9]/g, '') === s.parentPhone.replace(/[^0-9]/g, '')
+      ) {
+        return true;
+      }
+      // 4. Nama lengkap orang tua sama persis
+      if (
+        currentUser.name &&
+        s.parentName &&
+        currentUser.name.trim().toLowerCase() === s.parentName.trim().toLowerCase()
+      ) {
+        return true;
+      }
+      return false;
+    });
+  }, [students, currentUser]);
 
-  const activeChild = myChildren.find((c) => c.id === activeChildId) || myChildren[0] || students[0];
+  const activeChild = myChildren.find((c) => c.id === activeChildId) || myChildren[0];
 
   const [printModalOpen, setPrintModalOpen] = useState(false);
 
@@ -813,39 +831,41 @@ export const ParentPortalView: React.FC<ParentPortalViewProps> = ({ initialTab =
       {/* TAB 2: PORTAL MONITORING NILAI & KEHADIRAN ANAK */}
       {activeSubTab === 'portal' && (
         <div className="space-y-6">
-          {/* Multi-Child Selector Tabs */}
-          <div className="p-4 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-            <div className="flex items-center gap-2">
-              <UserCheck className="w-5 h-5 text-indigo-600 shrink-0" />
-              <div>
-                <span className="font-bold text-xs text-slate-900 dark:text-white block">
-                  Pilih Profil Peserta Didik (Anak)
-                </span>
-                <span className="text-[11px] text-slate-500">
-                  Relasi keluarga telah diverifikasi sekolah melalui data KK & Dapodik (Multi-Anak Didukung).
-                </span>
+          {/* Multi-Child Selector Tabs - HANYA MUNCUL JIKA ORANG TUA MEMILIKI 2 ATAU LEBIH ANAK */}
+          {myChildren.length >= 2 && (
+            <div className="p-4 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-2xs">
+              <div className="flex items-center gap-2">
+                <UserCheck className="w-5 h-5 text-indigo-600 shrink-0" />
+                <div>
+                  <span className="font-bold text-xs text-slate-900 dark:text-white block">
+                    Pilih Profil Peserta Didik ({myChildren.length} Anak Terdaftar di Sekolah Ini)
+                  </span>
+                  <span className="text-[11px] text-slate-500">
+                    Relasi keluarga telah diverifikasi sekolah melalui data KK & Dapodik (Fitur Multi-Anak Aktif).
+                  </span>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-2 flex-wrap">
+                {myChildren.map((c) => {
+                  const isSelected = c.id === activeChild?.id;
+                  return (
+                    <button
+                      key={c.id}
+                      onClick={() => setActiveChildId(c.id)}
+                      className={`px-3.5 py-2 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                        isSelected
+                          ? 'bg-indigo-600 text-white shadow-xs'
+                          : 'bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700'
+                      }`}
+                    >
+                      {c.name} ({c.className})
+                    </button>
+                  );
+                })}
               </div>
             </div>
-
-            <div className="flex items-center gap-2">
-              {myChildren.map((c) => {
-                const isSelected = c.id === activeChild.id;
-                return (
-                  <button
-                    key={c.id}
-                    onClick={() => setActiveChildId(c.id)}
-                    className={`px-3.5 py-2 rounded-lg text-xs font-bold transition-all cursor-pointer ${
-                      isSelected
-                        ? 'bg-indigo-600 text-white shadow-xs'
-                        : 'bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-200'
-                    }`}
-                  >
-                    {c.name} ({c.className})
-                  </button>
-                );
-              })}
-            </div>
-          </div>
+          )}
 
           {/* Child Overview Cards */}
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
@@ -1020,9 +1040,9 @@ export const ParentPortalView: React.FC<ParentPortalViewProps> = ({ initialTab =
                   onChange={(e) => setSelectedStudentIdForMessage(e.target.value)}
                   className="w-full px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white cursor-pointer font-medium"
                 >
-                  {students.map((s) => (
+                  {(currentUser.role === 'orang_tua' ? myChildren : students).map((s) => (
                     <option key={s.id} value={s.id}>
-                      {s.name} — {s.className} (Ortu: {s.parentName || 'Belum diisi'})
+                      {s.name} — {s.className} (NISN: {s.nisn})
                     </option>
                   ))}
                 </select>

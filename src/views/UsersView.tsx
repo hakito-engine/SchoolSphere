@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { DataService } from '../services/dataService';
 import { User, Role } from '../types';
@@ -25,8 +25,25 @@ import {
 } from 'lucide-react';
 
 export const UsersView: React.FC = () => {
-  const { currentUser, updateCurrentUser } = useAuth();
+  const { currentUser, allUsers, refreshUsers, updateCurrentUser } = useAuth();
   const [users, setUsers] = useState<User[]>(() => DataService.getUsers());
+
+  // Real-time synchronization: otomatis terupdate saat user memperbarui password atau kredensial
+  useEffect(() => {
+    setUsers(DataService.getUsers());
+  }, [allUsers]);
+
+  useEffect(() => {
+    const handleSync = () => {
+      setUsers(DataService.getUsers());
+    };
+    window.addEventListener('schoolsphere_user_updated', handleSync);
+    window.addEventListener('storage', handleSync);
+    return () => {
+      window.removeEventListener('schoolsphere_user_updated', handleSync);
+      window.removeEventListener('storage', handleSync);
+    };
+  }, []);
   const [searchQuery, setSearchQuery] = useState('');
   const [roleFilter, setRoleFilter] = useState<string>('all');
   const [statusFilter, setStatusFilter] = useState<string>('all');

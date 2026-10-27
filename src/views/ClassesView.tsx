@@ -15,7 +15,7 @@ const DEFAULT_MAJORS = [
 ];
 
 export const ClassesView: React.FC = () => {
-  const { currentUser } = useAuth();
+  const { currentUser, refreshUsers } = useAuth();
   const [classes, setClasses] = useState<ClassRoom[]>(() => DataService.getClasses());
   const teachers = DataService.getTeachers();
 
@@ -113,7 +113,9 @@ export const ClassesView: React.FC = () => {
       }
     }
 
-    const teacher = teachers.find((t) => t.id === formData.homeroomTeacherId);
+    const teacher = formData.homeroomTeacherId
+      ? teachers.find((t) => t.id === formData.homeroomTeacherId)
+      : null;
 
     const payload: ClassRoom = {
       id: editingClass ? editingClass.id : formData.id || 'cls-' + Date.now(),
@@ -121,7 +123,7 @@ export const ClassesView: React.FC = () => {
       grade: formData.grade || 'X',
       major: finalMajor,
       academicYear: formData.academicYear || '2024/2025',
-      homeroomTeacherId: formData.homeroomTeacherId || teachers[0]?.id,
+      homeroomTeacherId: formData.homeroomTeacherId || '',
       homeroomTeacherName: teacher ? teacher.name : 'Belum Ditentukan',
       studentCount: editingClass ? editingClass.studentCount : 32,
       capacity: formData.capacity || 36,
@@ -132,6 +134,32 @@ export const ClassesView: React.FC = () => {
       name: currentUser.name,
       role: currentUser.role,
     });
+
+    // Update teachers list so isHomeroom matches current classes accurately
+    const allTeachers = DataService.getTeachers();
+    const currentClasses = DataService.getClasses();
+    const homeroomTeacherIds = new Set(currentClasses.map((c) => c.homeroomTeacherId).filter(Boolean));
+
+    allTeachers.forEach((tch) => {
+      const isNowHomeroom = homeroomTeacherIds.has(tch.id);
+      const assignedCls = currentClasses.find((c) => c.homeroomTeacherId === tch.id);
+      if (tch.isHomeroom !== isNowHomeroom || tch.homeroomClassName !== (assignedCls?.name || '')) {
+        DataService.saveTeacher({
+          ...tch,
+          isHomeroom: isNowHomeroom,
+          homeroomClassName: assignedCls?.name || undefined,
+        }, {
+          id: currentUser.id,
+          name: currentUser.name,
+          role: currentUser.role,
+        });
+      }
+    });
+
+    if (refreshUsers) refreshUsers();
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('schoolsphere_user_updated', { detail: { classId: payload.id } }));
+    }
 
     setClasses(DataService.getClasses());
     setIsModalOpen(false);
@@ -383,6 +411,7 @@ export const ClassesView: React.FC = () => {
                   onChange={(e) => setFormData({ ...formData, homeroomTeacherId: e.target.value })}
                   className="w-full px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white cursor-pointer"
                 >
+                  <option value="">-- Belum Ditentukan / Tanpa Wali Kelas --</option>
                   {teachers.map((t) => (
                     <option key={t.id} value={t.id}>
                       {t.name} ({t.position || 'Guru'})

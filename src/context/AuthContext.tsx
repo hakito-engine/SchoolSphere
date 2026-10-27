@@ -82,10 +82,56 @@ export function cleanUsername(input: string): string {
     .replace(/[^a-z0-9]/g, '');
 }
 
+export function getTeacherHomeroomInfo(user: User | null | undefined): {
+  isHomeroom: boolean;
+  classId?: string;
+  className?: string;
+} {
+  if (!user) return { isHomeroom: false };
+  const classes = DataService.getClasses();
+
+  // 1. Pure wali_kelas role
+  if (user.role === 'wali_kelas') {
+    const assignedClass = classes.find(
+      (c) =>
+        c.id === user.classId ||
+        c.homeroomTeacherId === user.id ||
+        (user.nipOrNisn && c.homeroomTeacherId === user.nipOrNisn) ||
+        (c.homeroomTeacherName && user.name && c.homeroomTeacherName.trim().toLowerCase() === user.name.trim().toLowerCase())
+    ) || classes[0];
+    return {
+      isHomeroom: true,
+      classId: assignedClass?.id || user.classId || 'cls-xmipa1',
+      className: assignedClass?.name || 'X MIPA 1',
+    };
+  }
+
+  // 2. Guru Mapel yang merangkap Wali Kelas
+  // Sumber otoritatif tunggal: data kelas aktif di DataService
+  if (user.role === 'guru') {
+    const assignedClass = classes.find(
+      (c) =>
+        (c.homeroomTeacherId && (c.homeroomTeacherId === user.id || (user.nipOrNisn && c.homeroomTeacherId === user.nipOrNisn))) ||
+        (c.homeroomTeacherName && user.name && c.homeroomTeacherName.trim().toLowerCase() === user.name.trim().toLowerCase())
+    );
+    if (assignedClass) {
+      return {
+        isHomeroom: true,
+        classId: assignedClass.id,
+        className: assignedClass.name,
+      };
+    }
+    return { isHomeroom: false };
+  }
+
+  return { isHomeroom: false };
+}
+
 interface AuthContextType {
   currentUser: User;
   allUsers: User[];
   roleInfo: RoleInfo;
+  homeroomInfo: { isHomeroom: boolean; classId?: string; className?: string };
   isAuthenticated: boolean;
   login: (usernameOrEmail: string, password: string) => { success: boolean; message: string };
   logout: () => void;
@@ -160,6 +206,14 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       };
     }
 
+    // Blokir akses jika user dinonaktifkan oleh Super Admin
+    if (user.status === 'nonaktif') {
+      return {
+        success: false,
+        message: 'Akun Anda telah dinonaktifkan oleh Super Admin. Silakan hubungi bagian administrasi sekolah untuk mengaktifkan kembali akun Anda.',
+      };
+    }
+
     const effectivePassword = user.password || '123456';
     if (password !== effectivePassword && password !== '123456') {
       return {
@@ -202,6 +256,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const ok = DataService.changeUserPassword(currentUser.id, newPass);
     if (ok) {
       refreshUsers();
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new CustomEvent('schoolsphere_user_updated', { detail: { userId: currentUser.id } }));
+      }
       DataService.logAction(
         { id: currentUser.id, name: currentUser.name, role: currentUser.role },
         'CHANGE_PASSWORD',
@@ -230,6 +287,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const switchUserById = (userId: string) => {
     const found = allUsers.find((u) => u.id === userId);
     if (found) {
+      if (found.status === 'nonaktif') {
+        alert(`Akun ${found.name} sedang dinonaktifkan oleh Super Admin dan tidak dapat login.`);
+        return;
+      }
       setCurrentUser(found);
       setIsAuthenticated(true);
       localStorage.setItem('schoolsphere_auth_user_id', found.id);
@@ -273,7 +334,13 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       case 'assignments':
         return ['super_admin', 'wakasek_kurikulum', 'guru', 'wali_kelas', 'siswa'].includes(role);
       case 'homeroom_reports':
-        return ['super_admin', 'kepala_sekolah', 'wakasek_kurikulum', 'operator', 'wali_kelas'].includes(role);
+        if (['super_admin', 'kepala_sekolah', 'wakasek_kurikulum', 'operator'].includes(role)) return true;
+        if (role === 'wali_kelas') return true;
+        if (role === 'guru') {
+          // Hanya guru mapel yang berperan sebagai Wali Kelas yang memiliki fitur ini
+          return getTeacherHomeroomInfo(currentUser).isHomeroom;
+        }
+        return false;
       case 'exams':
         // Khusus Guru Mapel dan Siswa saja
         return ['guru', 'siswa'].includes(role);
@@ -282,7 +349,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       case 'counseling':
         return ['super_admin', 'kepala_sekolah', 'guru_bk', 'siswa'].includes(role);
       case 'parent_portal':
-        return ['super_admin', 'wakasek_kurikulum', 'wali_kelas', 'guru_bk', 'orang_tua'].includes(role);
+        if (['super_admin', 'wakasek_kurikulum', 'wali_kelas', 'guru_bk', 'orang_tua'].includes(role)) return true;
+        if (role === 'guru') {
+          return getTeacherHomeroomInfo(currentUser).isHomeroom;
+        }
+        return false;
       case 'parent_messages':
         return ['super_admin', 'wakasek_kurikulum', 'guru_bk', 'wali_kelas', 'guru', 'orang_tua'].includes(role);
       case 'analytics':
@@ -296,12 +367,14 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       default:
         return true;
     }
-  }, [currentUser?.role]);
+  }, [currentUser]);
 
   const updateCurrentUser = (user: User) => {
     setCurrentUser(user);
     refreshUsers();
   };
+
+  const homeroomInfo = getTeacherHomeroomInfo(currentUser);
 
   return (
     <AuthContext.Provider
@@ -309,6 +382,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         currentUser,
         allUsers,
         roleInfo: ROLE_DEFINITIONS[currentUser?.role || 'super_admin'],
+        homeroomInfo,
         isAuthenticated,
         login,
         logout,

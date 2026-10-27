@@ -24,6 +24,9 @@ import {
   TeacherStudentMessage,
   LessonPeriodConfig,
   PasswordResetRequest,
+  EffectiveWeekConfig,
+  StudentExtracurricular,
+  SubjectLearningObjective,
 } from '../types';
 import {
   INITIAL_SCHOOL_PROFILE,
@@ -48,6 +51,9 @@ import {
   INITIAL_SCHEDULE_BLOCKS,
   INITIAL_TEACHER_STUDENT_MESSAGES,
   INITIAL_LESSON_PERIOD_CONFIG,
+  INITIAL_EFFECTIVE_WEEKS,
+  INITIAL_EXTRACURRICULARS,
+  INITIAL_LEARNING_OBJECTIVES,
 } from '../data/mockData';
 
 const STORAGE_PREFIX = 'schoolsphere_pro_';
@@ -153,6 +159,61 @@ export class DataService {
     }
 
     return updated;
+  }
+
+  // --- Effective Weeks (Minggu Efektif & Hari Belajar / Semester - Khusus Wakasek Kurikulum) ---
+  static getEffectiveWeeks(): EffectiveWeekConfig[] {
+    return getStoredItem<EffectiveWeekConfig[]>('effective_weeks', INITIAL_EFFECTIVE_WEEKS);
+  }
+
+  static saveEffectiveWeeks(
+    config: EffectiveWeekConfig,
+    currentUser: { id: string; name: string; role: Role }
+  ): EffectiveWeekConfig {
+    const list = this.getEffectiveWeeks();
+    const idx = list.findIndex((w) => w.id === config.id || (w.academicYear === config.academicYear && w.semester === config.semester));
+    const nowStr = new Date().toISOString().replace('T', ' ').substring(0, 16);
+    const itemToSave = { ...config, updatedAt: nowStr, updatedBy: currentUser.name };
+
+    let updated: EffectiveWeekConfig[];
+    if (idx >= 0) {
+      updated = [...list];
+      updated[idx] = itemToSave;
+    } else {
+      updated = [itemToSave, ...list];
+    }
+    setStoredItem('effective_weeks', updated);
+    this.logAction(
+      currentUser,
+      'UPDATE_EFFECTIVE_WEEKS',
+      'Kurikulum & Minggu Efektif',
+      `Menetapkan ${config.effectiveWeeks} minggu efektif (${config.effectiveDays} hari KBM) untuk Semester ${config.semester} TA ${config.academicYear}.`
+    );
+    return itemToSave;
+  }
+
+  static getActiveEffectiveWeeks(academicYear?: string, semester?: 'Ganjil' | 'Genap'): EffectiveWeekConfig {
+    const all = this.getEffectiveWeeks();
+    const activeAY = this.getAcademicYears().find((ay) => ay.isActive) || this.getAcademicYears()[0];
+    const targetYear = academicYear || activeAY?.year || '2024/2025';
+    const targetSemester = semester || activeAY?.semester || 'Ganjil';
+
+    const found = all.find((w) => w.academicYear === targetYear && w.semester === targetSemester);
+    if (found) return found;
+
+    // Fallback default
+    return {
+      id: `ew-${targetYear.replace(/[^0-9]/g, '')}-${targetSemester.toLowerCase()}`,
+      academicYear: targetYear,
+      semester: targetSemester,
+      totalWeeks: 26,
+      effectiveWeeks: targetSemester === 'Ganjil' ? 18 : 16,
+      ineffectiveWeeks: targetSemester === 'Ganjil' ? 8 : 10,
+      effectiveDays: targetSemester === 'Ganjil' ? 90 : 80,
+      holidaysCount: 15,
+      assessmentWeeks: 2,
+      notes: `Alokasi standar ${targetSemester === 'Ganjil' ? '18' : '16'} minggu efektif KBM.`,
+    };
   }
 
   // --- Users ---
@@ -879,9 +940,32 @@ export class DataService {
 
   static gradeSubmission(id: string, score: number, feedback: string, currentUser: { id: string; name: string; role: Role }): void {
     const list = this.getSubmissions();
+    const targetSub = list.find((s) => s.id === id);
     const updated = list.map((s) => (s.id === id ? { ...s, score, feedback, status: 'graded' as const } : s));
     setStoredItem('submissions', updated);
     this.logAction(currentUser, 'GRADE_SUBMISSION', 'Tugas & Penilaian', `Menilai tugas ID #${id} dengan skor ${score}`);
+
+    // Requirement 9: Notifikasi Koreksi Nilai hanya muncul di akun siswa yang dinilai
+    if (targetSub) {
+      const assignments = this.getAssignments();
+      const asg = assignments.find((a) => a.id === targetSub.assignmentId);
+      const asgTitle = asg?.title || 'Tugas Pembelajaran';
+      const notifs = this.getNotifications();
+      const cleanStdId = targetSub.studentId.replace('usr-std-', '');
+
+      const newNotif: NotificationItem = {
+        id: 'notif-grade-' + Date.now(),
+        title: 'Koreksi Nilai Dipublikasikan',
+        message: `Nilai "${asgTitle}" Anda telah dikoreksi oleh ${currentUser.name}. Skor: ${score}/100.${feedback ? ` Catatan: "${feedback}"` : ''}`,
+        time: 'Baru saja',
+        read: false,
+        type: 'nilai',
+        linkTarget: 'assignments',
+        targetUserId: `usr-std-${cleanStdId}`,
+        targetStudentId: cleanStdId,
+      };
+      setStoredItem('notifications', [newNotif, ...notifs]);
+    }
   }
 
   static resetSubmissionGrade(id: string, currentUser: { id: string; name: string; role: Role }): void {
@@ -1856,6 +1940,7 @@ export class DataService {
       schedule: this.getSchedule(),
       scheduleBlocks: this.getScheduleBlocks(),
       lessonPeriodConfig: this.getLessonPeriodConfig(),
+      effectiveWeeks: this.getEffectiveWeeks(),
       counseling: this.getCounselingRecords(),
       announcements: this.getAnnouncements(),
       notifications: this.getNotifications(),
@@ -1872,6 +1957,7 @@ export class DataService {
       const parsed = JSON.parse(jsonStr);
       if (parsed.schoolProfile) setStoredItem('school_profile', parsed.schoolProfile);
       if (parsed.academicYears) setStoredItem('academic_years', parsed.academicYears);
+      if (parsed.effectiveWeeks) setStoredItem('effective_weeks', parsed.effectiveWeeks);
       if (parsed.users) setStoredItem('users', parsed.users);
       if (parsed.students) setStoredItem('students', parsed.students);
       if (parsed.teachers) setStoredItem('teachers', parsed.teachers);
@@ -1909,6 +1995,100 @@ export class DataService {
     } catch (e) {
       console.error('Import failed', e);
       return false;
+    }
+  }
+
+  // --- Student Extracurricular Activities (Khusus Wali Kelas sesuai kelas binaan) ---
+  static getExtracurriculars(classId?: string): StudentExtracurricular[] {
+    const all = getStoredItem<StudentExtracurricular[]>('student_extracurriculars', INITIAL_EXTRACURRICULARS);
+    if (!classId) return all;
+    return all.filter((item) => item.classId === classId);
+  }
+
+  static getStudentExtracurriculars(studentId: string): StudentExtracurricular[] {
+    const all = getStoredItem<StudentExtracurricular[]>('student_extracurriculars', INITIAL_EXTRACURRICULARS);
+    return all.filter((item) => item.studentId === studentId);
+  }
+
+  static saveExtracurricular(
+    activity: StudentExtracurricular,
+    currentUser: { id: string; name: string; role: Role }
+  ): StudentExtracurricular {
+    const list = getStoredItem<StudentExtracurricular[]>('student_extracurriculars', INITIAL_EXTRACURRICULARS);
+    const idx = list.findIndex((x) => x.id === activity.id);
+    const nowStr = new Date().toISOString().replace('T', ' ').substring(0, 16);
+    const toSave: StudentExtracurricular = {
+      ...activity,
+      updatedAt: nowStr,
+      updatedBy: currentUser.name,
+    };
+
+    let updated: StudentExtracurricular[];
+    if (idx >= 0) {
+      updated = [...list];
+      updated[idx] = toSave;
+      this.logAction(currentUser, 'UPDATE_EXTRACURRICULAR', 'Rapor Wali Kelas', `Memperbarui ekstrakurikuler ${toSave.activityName} untuk siswa ${toSave.studentName}`);
+    } else {
+      updated = [toSave, ...list];
+      this.logAction(currentUser, 'ADD_EXTRACURRICULAR', 'Rapor Wali Kelas', `Menambahkan ekstrakurikuler ${toSave.activityName} untuk siswa ${toSave.studentName}`);
+    }
+    setStoredItem('student_extracurriculars', updated);
+    return toSave;
+  }
+
+  static deleteExtracurricular(
+    id: string,
+    currentUser: { id: string; name: string; role: Role }
+  ): void {
+    const list = getStoredItem<StudentExtracurricular[]>('student_extracurriculars', INITIAL_EXTRACURRICULARS);
+    const target = list.find((x) => x.id === id);
+    const updated = list.filter((x) => x.id !== id);
+    setStoredItem('student_extracurriculars', updated);
+    if (target) {
+      this.logAction(currentUser, 'DELETE_EXTRACURRICULAR', 'Rapor Wali Kelas', `Menghapus ekstrakurikuler ${target.activityName} siswa ${target.studentName}`);
+    }
+  }
+
+  // --- Capaian Pembelajaran & Alur Tujuan Pembelajaran (CP & ATP - Khusus Guru Mapel) ---
+  static getLearningObjectives(subjectId?: string, grade?: string): SubjectLearningObjective[] {
+    const all = getStoredItem<SubjectLearningObjective[]>('learning_objectives', INITIAL_LEARNING_OBJECTIVES);
+    return all.filter((item) => {
+      if (subjectId && item.subjectId !== subjectId) return false;
+      if (grade && item.grade !== grade) return false;
+      return true;
+    });
+  }
+
+  static saveLearningObjective(
+    obj: SubjectLearningObjective,
+    currentUser: { id: string; name: string; role: Role }
+  ): SubjectLearningObjective {
+    const list = getStoredItem<SubjectLearningObjective[]>('learning_objectives', INITIAL_LEARNING_OBJECTIVES);
+    const idx = list.findIndex((x) => x.id === obj.id);
+
+    let updated: SubjectLearningObjective[];
+    if (idx >= 0) {
+      updated = [...list];
+      updated[idx] = obj;
+      this.logAction(currentUser, 'UPDATE_CP_ATP', 'Kurikulum Merdeka', `Memperbarui Capaian Pembelajaran/ATP (${obj.tpCode}) mapel ${obj.subjectName}`);
+    } else {
+      updated = [obj, ...list];
+      this.logAction(currentUser, 'ADD_CP_ATP', 'Kurikulum Merdeka', `Menambahkan Capaian Pembelajaran/ATP baru (${obj.tpCode}) mapel ${obj.subjectName}`);
+    }
+    setStoredItem('learning_objectives', updated);
+    return obj;
+  }
+
+  static deleteLearningObjective(
+    id: string,
+    currentUser: { id: string; name: string; role: Role }
+  ): void {
+    const list = getStoredItem<SubjectLearningObjective[]>('learning_objectives', INITIAL_LEARNING_OBJECTIVES);
+    const target = list.find((x) => x.id === id);
+    const updated = list.filter((x) => x.id !== id);
+    setStoredItem('learning_objectives', updated);
+    if (target) {
+      this.logAction(currentUser, 'DELETE_CP_ATP', 'Kurikulum Merdeka', `Menghapus Capaian Pembelajaran/ATP (${target.tpCode}) mapel ${target.subjectName}`);
     }
   }
 

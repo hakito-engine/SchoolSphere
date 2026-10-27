@@ -158,7 +158,20 @@ export const ExamsView: React.FC = () => {
     return () => clearInterval(timer);
   }, [isTakingExam, timeLeftSeconds]);
 
+  const isExamExpired = (endDateStr: string): boolean => {
+    if (!endDateStr) return false;
+    const iso = endDateStr.includes(':') ? endDateStr.replace(' ', 'T') : `${endDateStr}T23:59:59`;
+    const d = new Date(iso);
+    return !isNaN(d.getTime()) && new Date() > d;
+  };
+
   const handleStartExam = (exam: OnlineExam) => {
+    // If exam has already passed its deadline, students cannot work on it
+    if (currentUser.role === 'siswa' && isExamExpired(exam.endDate)) {
+      alert(`Waktu pengerjaan ujian/kuis ini telah melewati batas deadline (${exam.endDate}) dan sesi telah ditutup. Ujian tidak dapat dikerjakan lagi.`);
+      return;
+    }
+
     // If exam has already been completed, prevent retake (Requirement 2)
     const isAlreadyDone =
       completedExamIds.includes(exam.id) ||
@@ -628,6 +641,12 @@ export const ExamsView: React.FC = () => {
                       REMEDIAL CBT
                     </span>
                   )}
+                  {isExamExpired(ex.endDate) && (
+                    <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-rose-100 text-rose-800 dark:bg-rose-950 dark:text-rose-300 border border-rose-300 dark:border-rose-800 flex items-center gap-1">
+                      <Clock className="w-3 h-3 text-rose-600" />
+                      WAKTU BERAKHIR
+                    </span>
+                  )}
                 </div>
 
                 <div className="flex items-center gap-2">
@@ -664,7 +683,9 @@ export const ExamsView: React.FC = () => {
                 <span>Durasi: <strong>{ex.durationMinutes} Menit</strong></span>
                 <span>Bobot Nilai: <strong>{ex.totalPoints} Poin</strong></span>
                 <span>Mulai: {ex.startDate}</span>
-                <span>Selesai: {ex.endDate}</span>
+                <span className={isExamExpired(ex.endDate) ? 'text-rose-600 dark:text-rose-400 font-bold' : ''}>
+                  Selesai: {ex.endDate} {isExamExpired(ex.endDate) ? '(Lewat)' : ''}
+                </span>
               </div>
 
               <div className="pt-2">
@@ -675,13 +696,18 @@ export const ExamsView: React.FC = () => {
                       Ujian Selesai Dikerjakan {studentScore !== undefined ? `(Skor: ${studentScore}/${ex.totalPoints})` : ''} · Tidak Dapat Diulangi
                     </span>
                   </div>
+                ) : isExamExpired(ex.endDate) && currentUser.role === 'siswa' ? (
+                  <div className="w-full flex items-center justify-center gap-2 py-2 px-3 text-xs font-bold rounded-lg bg-rose-50 dark:bg-rose-950/60 text-rose-700 dark:text-rose-300 border border-rose-200 dark:border-rose-800">
+                    <AlertCircle className="w-4 h-4 text-rose-600 shrink-0" />
+                    <span>Ditutup · Melewati Batas Waktu ({ex.endDate})</span>
+                  </div>
                 ) : (
                   <button
                     onClick={() => handleStartExam(ex)}
                     className="w-full flex items-center justify-center gap-2 py-2 text-xs font-bold rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white transition-colors cursor-pointer"
                   >
                     <Play className="w-3.5 h-3.5" />
-                    <span>Simulasikan / Kerjakan Ujian CBT</span>
+                    <span>{currentUser.role === 'siswa' ? 'Kerjakan Ujian CBT Sekarang' : 'Simulasikan / Kerjakan Ujian CBT'}</span>
                   </button>
                 )}
               </div>
@@ -690,10 +716,10 @@ export const ExamsView: React.FC = () => {
         })}
       </div>
 
-      {/* MODAL: BUAT SOAL / UJIAN REMEDIAL CBT */}
+      {/* MODAL: BUAT SOAL / UJIAN REMEDIAL CBT (Dengan fitur scrolling penuh) */}
       {isCreateModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 overflow-y-auto">
-          <div className="bg-white dark:bg-slate-900 rounded-xl max-w-lg w-full p-6 border border-slate-200 dark:border-slate-800 shadow-xl space-y-4 my-8">
+          <div className="bg-white dark:bg-slate-900 rounded-xl max-w-2xl w-full p-6 border border-slate-200 dark:border-slate-800 shadow-xl space-y-4 my-auto max-h-[90vh] overflow-y-auto">
             <div className="flex items-center justify-between pb-2 border-b border-slate-100 dark:border-slate-800">
               <h3 className="text-sm font-bold text-slate-900 dark:text-white flex items-center gap-2">
                 <Laptop className="w-4 h-4 text-indigo-600" />

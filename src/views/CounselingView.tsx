@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { DataService } from '../services/dataService';
 import { CounselingRecord, Student } from '../types';
@@ -44,11 +44,48 @@ export const CounselingView: React.FC = () => {
     (s) => s.attendance.alpa >= 3 || s.gpa < 75
   );
 
-  // List of available BK teachers for consultation booking
-  const bkTeachers = [
-    { id: 'usr-guru-bk', name: 'Dewi Lestari, S.Psi., M.Pd.', role: 'Guru Bimbingan dan Konseling' },
-    { id: 'tch-bk-02', name: 'Drs. H. Suryanto, M.Psi.', role: 'Koordinator BK & Karir' },
-  ];
+  // List of registered BK teachers dynamically derived from Admin settings
+  const allUsers = DataService.getUsers();
+  const bkTeachers = useMemo(() => {
+    const list: { id: string; name: string; role: string }[] = [];
+
+    // 1. Teachers explicitly designated with BK subjects or BK position
+    teachers.forEach((t) => {
+      const isBkSubject = t.subjectNames?.some((s) => /bk|bimbingan|konseling/i.test(s));
+      const isBkPos = t.position ? /bk|bimbingan|konseling/i.test(t.position) : false;
+      if (isBkSubject || isBkPos) {
+        list.push({
+          id: t.id,
+          name: t.name,
+          role: t.position || 'Guru Bimbingan dan Konseling (BK)',
+        });
+      }
+    });
+
+    // 2. Users with role guru_bk
+    allUsers
+      .filter((u) => u.role === 'guru_bk')
+      .forEach((u) => {
+        if (!list.some((existing) => existing.name.toLowerCase() === u.name.toLowerCase())) {
+          list.push({
+            id: u.id,
+            name: u.name,
+            role: u.position || 'Guru Bimbingan dan Konseling (BK)',
+          });
+        }
+      });
+
+    // Fallback to first teacher if none explicitly tagged
+    if (list.length === 0 && teachers.length > 0) {
+      list.push({
+        id: teachers[0].id,
+        name: teachers[0].name,
+        role: teachers[0].position || 'Guru Pembimbing',
+      });
+    }
+
+    return list;
+  }, [teachers, allUsers]);
 
   // Permission: Hanya Guru BK yang bisa mengedit riwayat & tindak lanjut
   const isGuruBk = currentUser.role === 'guru_bk';
@@ -71,7 +108,7 @@ export const CounselingView: React.FC = () => {
   // Student Self-Request Modal State (Requirement 22)
   const [isStudentRequestModalOpen, setIsStudentRequestModalOpen] = useState(false);
   const [reqDate, setReqDate] = useState(new Date(Date.now() + 86400000).toISOString().substring(0, 10));
-  const [reqCounselorName, setReqCounselorName] = useState(bkTeachers[0].name);
+  const [reqCounselorName, setReqCounselorName] = useState(() => bkTeachers[0]?.name || 'Dewi Lestari, S.Psi., M.Pd.');
   const [reqCategory, setReqCategory] = useState<CounselingRecord['category']>('Karir/Studi Lanjut');
   const [reqIssue, setReqIssue] = useState('');
   const [requestSuccessNotice, setRequestSuccessNotice] = useState<string | null>(null);
@@ -222,10 +259,17 @@ export const CounselingView: React.FC = () => {
 
   const filteredRecords = records.filter((rec) => {
     if (currentUser.role === 'siswa') {
+      const myIds = [
+        currentUser.id,
+        currentStudent?.id,
+        currentUser.id.replace('usr-siswa-', 'std-'),
+        currentUser.id.replace('usr-std-', 'std-'),
+      ].filter(Boolean) as string[];
+
       const isMine =
-        rec.studentId === currentUser.id ||
-        (currentStudent && rec.studentId === currentStudent.id) ||
-        (currentUser.name && rec.studentName.toLowerCase() === currentUser.name.toLowerCase());
+        myIds.includes(rec.studentId) ||
+        (currentStudent && rec.studentName.toLowerCase().trim() === currentStudent.name.toLowerCase().trim()) ||
+        (currentUser.name && rec.studentName.toLowerCase().trim() === currentUser.name.toLowerCase().trim());
       if (!isMine) return false;
     }
 
@@ -832,14 +876,27 @@ export const CounselingView: React.FC = () => {
       <PrintModal
         isOpen={printModalOpen}
         onClose={() => setPrintModalOpen(false)}
-        title="Cetak Laporan Rekapitulasi Bimbingan Konseling"
-        documentTitle="LAPORAN REKAPITULASI BIMBINGAN DAN KONSELING (BK)"
+        title={currentUser.role === 'siswa' ? 'Cetak Catatan Konseling Pribadi' : 'Cetak Laporan Rekapitulasi Bimbingan Konseling'}
+        documentTitle={
+          currentUser.role === 'siswa'
+            ? 'CATATAN REKAPITULASI LAYANAN BIMBINGAN DAN KONSELING PESERTA DIDIK'
+            : 'LAPORAN REKAPITULASI BIMBINGAN DAN KONSELING (BK)'
+        }
         documentNumber="421.8 / BK / SMA-NU / X / 2024"
-        rightSignerTitle="Guru Bimbingan dan Konseling"
-        rightSignerName="Dewi Lestari, S.Psi., M.Pd."
+        rightSignerTitle={bkTeachers[0]?.role || 'Guru Bimbingan dan Konseling'}
+        rightSignerName={bkTeachers[0]?.name || 'Dewi Lestari, S.Psi., M.Pd.'}
         rightSignerNip="19891104 201402 2 003"
       >
         <div className="space-y-4">
+          {currentUser.role === 'siswa' && (
+            <div className="p-3 bg-slate-50 border border-black/30 rounded text-xs grid grid-cols-2 gap-2 mb-2">
+              <p><strong>Nama Peserta Didik:</strong> {currentStudent?.name || currentUser.name}</p>
+              <p><strong>Kelas:</strong> {currentStudent?.className || currentUser.classId?.replace('cls-', '').toUpperCase() || 'X MIPA 1'}</p>
+              <p><strong>NISN:</strong> {currentStudent?.nisn || currentUser.nipOrNisn || '-'}</p>
+              <p><strong>Status Kerahasiaan:</strong> Dokumen Bimbingan Terproteksi</p>
+            </div>
+          )}
+
           <table className="w-full border-collapse border border-black text-xs">
             <thead>
               <tr className="bg-slate-100">
@@ -852,24 +909,32 @@ export const CounselingView: React.FC = () => {
               </tr>
             </thead>
             <tbody>
-              {records.map((r, i) => (
-                <tr key={r.id}>
-                  <td className="border border-black py-1 px-2 text-center font-mono">{i + 1}</td>
-                  <td className="border border-black py-1 px-2 text-center font-mono">{r.date}</td>
-                  <td className="border border-black py-1 px-3">
-                    <strong>{r.studentName}</strong> ({r.className})
+              {filteredRecords.length === 0 ? (
+                <tr>
+                  <td colSpan={6} className="border border-black py-4 px-3 text-center text-slate-500 italic">
+                    Belum ada catatan riwayat bimbingan konseling untuk peserta didik ini.
                   </td>
-                  <td className="border border-black py-1 px-2 text-center">{r.category}</td>
-                  <td className="border border-black py-1 px-3 text-[11px]">
-                    <div>{r.issueSummary}</div>
-                    <div className="text-slate-600 italic mt-0.5">Rencana: {r.followUpPlan}</div>
-                    {r.scheduledTime && (
-                      <div className="text-indigo-800 font-semibold mt-0.5">Jadwal: {r.scheduledTime}</div>
-                    )}
-                  </td>
-                  <td className="border border-black py-1 px-2 text-center font-bold text-[10px] uppercase">{r.status}</td>
                 </tr>
-              ))}
+              ) : (
+                filteredRecords.map((r, i) => (
+                  <tr key={r.id}>
+                    <td className="border border-black py-1 px-2 text-center font-mono">{i + 1}</td>
+                    <td className="border border-black py-1 px-2 text-center font-mono">{r.date}</td>
+                    <td className="border border-black py-1 px-3">
+                      <strong>{r.studentName}</strong> ({r.className})
+                    </td>
+                    <td className="border border-black py-1 px-2 text-center">{r.category}</td>
+                    <td className="border border-black py-1 px-3 text-[11px]">
+                      <div>{r.issueSummary}</div>
+                      <div className="text-slate-600 italic mt-0.5">Rencana: {r.followUpPlan}</div>
+                      {r.scheduledTime && (
+                        <div className="text-indigo-800 font-semibold mt-0.5">Jadwal: {r.scheduledTime}</div>
+                      )}
+                    </td>
+                    <td className="border border-black py-1 px-2 text-center font-bold text-[10px] uppercase">{r.status}</td>
+                  </tr>
+                ))
+              )}
             </tbody>
           </table>
         </div>

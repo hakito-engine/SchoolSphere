@@ -1,7 +1,7 @@
 import React, { useState, useRef } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { DataService } from '../services/dataService';
-import { SchoolProfile, AuditLog, AcademicYearConfig } from '../types';
+import { SchoolProfile, AuditLog, AcademicYearConfig, EffectiveWeekConfig } from '../types';
 import { OfficialLetterhead } from '../components/common/OfficialLetterhead';
 import { formatActionText, formatRoleText } from '../utils/formatters';
 import {
@@ -36,6 +36,7 @@ import {
   Code,
   HelpCircle,
   Cloud,
+  CalendarRange,
 } from 'lucide-react';
 
 export const SchoolSettingsView: React.FC = () => {
@@ -44,7 +45,7 @@ export const SchoolSettingsView: React.FC = () => {
   const [academicYears, setAcademicYears] = useState<AcademicYearConfig[]>(() => DataService.getAcademicYears());
   const [auditLogs, setAuditLogs] = useState<AuditLog[]>(() => DataService.getAuditLogs());
 
-  const [activeTab, setActiveTab] = useState<'profil' | 'admin_account' | 'kop_surat' | 'nomor_surat' | 'tahun_ajaran' | 'tanggal_dokumen' | 'database_mysql' | 'instalasi_web' | 'backup' | 'audit'>('profil');
+  const [activeTab, setActiveTab] = useState<'profil' | 'admin_account' | 'kop_surat' | 'nomor_surat' | 'minggu_efektif' | 'tahun_ajaran' | 'tanggal_dokumen' | 'database_mysql' | 'instalasi_web' | 'backup' | 'audit'>('profil');
   const [saveSuccess, setSaveSuccess] = useState(false);
   const [saveMessage, setSaveMessage] = useState('Pengaturan berhasil disimpan dan diperbarui di seluruh dokumen cetak.');
 
@@ -101,6 +102,67 @@ export const SchoolSettingsView: React.FC = () => {
   const [newAyStartDate, setNewAyStartDate] = useState('2025-07-14');
   const [newAyEndDate, setNewAyEndDate] = useState('2025-12-19');
   const [newAyCloneFromPrevious, setNewAyCloneFromPrevious] = useState(true);
+
+  // Effective Weeks Management State (Khusus Wakasek Kurikulum)
+  const [effectiveWeeksList, setEffectiveWeeksList] = useState<EffectiveWeekConfig[]>(() => DataService.getEffectiveWeeks());
+  const initialActiveAy = academicYears.find((ay) => ay.isActive) || academicYears[0];
+  const [selectedEwYear, setSelectedEwYear] = useState(initialActiveAy?.year || '2024/2025');
+  const [selectedEwSemester, setSelectedEwSemester] = useState<'Ganjil' | 'Genap'>(initialActiveAy?.semester || 'Ganjil');
+
+  const currentEw = effectiveWeeksList.find(
+    (w) => w.academicYear === selectedEwYear && w.semester === selectedEwSemester
+  ) || {
+    id: `ew-${selectedEwYear.replace(/[^0-9]/g, '')}-${selectedEwSemester.toLowerCase()}`,
+    academicYear: selectedEwYear,
+    semester: selectedEwSemester,
+    totalWeeks: 26,
+    effectiveWeeks: selectedEwSemester === 'Ganjil' ? 18 : 16,
+    ineffectiveWeeks: selectedEwSemester === 'Ganjil' ? 8 : 10,
+    effectiveDays: selectedEwSemester === 'Ganjil' ? 90 : 80,
+    holidaysCount: 15,
+    assessmentWeeks: 2,
+    notes: `Alokasi efektif KBM Semester ${selectedEwSemester} ${selectedEwYear}.`,
+  };
+
+  const [ewForm, setEwForm] = useState<EffectiveWeekConfig>(currentEw);
+
+  const handleSelectEwPeriod = (year: string, semester: 'Ganjil' | 'Genap') => {
+    setSelectedEwYear(year);
+    setSelectedEwSemester(semester);
+    const found = effectiveWeeksList.find((w) => w.academicYear === year && w.semester === semester);
+    if (found) {
+      setEwForm(found);
+    } else {
+      setEwForm({
+        id: `ew-${year.replace(/[^0-9]/g, '')}-${semester.toLowerCase()}`,
+        academicYear: year,
+        semester,
+        totalWeeks: 26,
+        effectiveWeeks: semester === 'Ganjil' ? 18 : 16,
+        ineffectiveWeeks: semester === 'Ganjil' ? 8 : 10,
+        effectiveDays: semester === 'Ganjil' ? 90 : 80,
+        holidaysCount: 15,
+        assessmentWeeks: 2,
+        notes: `Alokasi efektif KBM Semester ${semester} ${year}.`,
+      });
+    }
+  };
+
+  const handleSaveEffectiveWeeks = (e: React.FormEvent) => {
+    e.preventDefault();
+    const saved = DataService.saveEffectiveWeeks(ewForm, {
+      id: currentUser.id,
+      name: currentUser.name,
+      role: currentUser.role,
+    });
+    setEffectiveWeeksList(DataService.getEffectiveWeeks());
+    setSaveMessage(
+      `Alokasi ${saved.effectiveWeeks} Minggu Efektif (${saved.effectiveDays} Hari KBM) Semester ${saved.semester} TA ${saved.academicYear} berhasil disimpan! Angka ini menjadi dasar perhitungan persentase presensi.`
+    );
+    setSaveSuccess(true);
+    setAuditLogs(DataService.getAuditLogs());
+    setTimeout(() => setSaveSuccess(false), 4000);
+  };
 
   // Backup state
   const [importJsonText, setImportJsonText] = useState('');
@@ -456,6 +518,20 @@ def health():
           <span>Pengaturan Nomor Surat</span>
           <span className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-indigo-100 text-indigo-800 dark:bg-indigo-950 dark:text-indigo-300">
             Terintegrasi
+          </span>
+        </button>
+        <button
+          onClick={() => setActiveTab('minggu_efektif')}
+          className={`pb-2.5 px-3 transition-colors whitespace-nowrap cursor-pointer flex items-center gap-1.5 ${
+            activeTab === 'minggu_efektif'
+              ? 'border-b-2 border-indigo-600 text-indigo-600 dark:text-indigo-400 font-bold'
+              : 'text-slate-500 hover:text-slate-700'
+          }`}
+        >
+          <CalendarRange className="w-3.5 h-3.5 text-cyan-600" />
+          <span>Minggu Efektif & Kalender</span>
+          <span className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-cyan-100 text-cyan-800 dark:bg-cyan-950 dark:text-cyan-300">
+            Wakasek Kurikulum
           </span>
         </button>
         <button
@@ -1270,6 +1346,39 @@ def health():
               </button>
             </div>
 
+            {/* Requirement 7: Fitur Aktifkan/Nonaktifkan Nomor Surat pada saat Cetak Dokumen (Dikelola oleh Admin) */}
+            <div className="p-4 rounded-xl border border-indigo-200 dark:border-indigo-900 bg-indigo-50/50 dark:bg-indigo-950/30 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+              <div className="space-y-1">
+                <div className="flex items-center gap-2">
+                  <span className="font-bold text-xs text-slate-900 dark:text-white">
+                    Status Penerapan Nomor Surat pada Dokumen Cetak
+                  </span>
+                  <span
+                    className={`px-2 py-0.5 rounded text-[10px] font-bold ${
+                      profile.showOfficialLetterNumber !== false
+                        ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300'
+                        : 'bg-rose-100 text-rose-800 dark:bg-rose-950 dark:text-rose-300'
+                    }`}
+                  >
+                    {profile.showOfficialLetterNumber !== false ? 'AKTIF (DITAMPILKAN)' : 'NONAKTIF (DISEMBUNYIKAN)'}
+                  </span>
+                </div>
+                <p className="text-[11px] text-slate-600 dark:text-slate-400 leading-relaxed">
+                  Admin dapat menonaktifkan pencetakan nomor surat jika sekolah mencetak pada blangko kop surat yang sudah berstempel atau untuk keperluan khusus.
+                </p>
+              </div>
+
+              <label className="relative inline-flex items-center cursor-pointer shrink-0">
+                <input
+                  type="checkbox"
+                  checked={profile.showOfficialLetterNumber !== false}
+                  onChange={(e) => handleProfileChange('showOfficialLetterNumber', e.target.checked)}
+                  className="sr-only peer"
+                />
+                <div className="w-11 h-6 bg-slate-300 peer-focus:outline-none rounded-full peer dark:bg-slate-700 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-indigo-600"></div>
+              </label>
+            </div>
+
             {/* Template Presets */}
             <div className="space-y-2">
               <label className="block text-slate-700 dark:text-slate-300 font-bold">
@@ -1437,6 +1546,254 @@ def health():
               >
                 <Save className="w-4 h-4" />
                 <span>Simpan dan Terapkan ke Dokumen</span>
+              </button>
+            </div>
+          </form>
+        </div>
+      )}
+
+      {/* TAB: PENGELOLAAN MINGGU & HARI EFEKTIF PER SEMESTER (Khusus Wakasek Kurikulum - Requirement 2) */}
+      {activeTab === 'minggu_efektif' && (
+        <div className="space-y-6">
+          <form onSubmit={handleSaveEffectiveWeeks} className="p-6 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 space-y-5 text-xs">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-slate-100 dark:border-slate-800">
+              <div>
+                <div className="flex items-center gap-2">
+                  <h3 className="font-bold text-sm text-slate-900 dark:text-white flex items-center gap-2">
+                    <CalendarRange className="w-4 h-4 text-cyan-600" />
+                    Pengelolaan Minggu & Hari Efektif Belajar (KBM)
+                  </h3>
+                  <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-cyan-100 text-cyan-800 dark:bg-cyan-950 dark:text-cyan-300">
+                    Khusus Wakasek Kurikulum
+                  </span>
+                </div>
+                <p className="text-slate-500 text-xs mt-0.5">
+                  Menetapkan alokasi minggu efektif dan hari belajar aktif per semester. Digunakan sebagai acuan dasar perhitungan persentase kehadiran peserta didik di Presensi & Rapor.
+                </p>
+              </div>
+              <button
+                type="submit"
+                className="flex items-center gap-1.5 px-4 py-2 text-xs font-semibold rounded-lg bg-cyan-600 hover:bg-cyan-700 text-white cursor-pointer shadow-xs transition-colors self-start sm:self-auto"
+              >
+                <Save className="w-4 h-4" />
+                <span>Simpan Minggu Efektif</span>
+              </button>
+            </div>
+
+            {/* Pilihan Tahun Ajaran & Semester */}
+            <div className="p-4 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 space-y-3">
+              <label className="block text-slate-800 dark:text-slate-200 font-bold">
+                Pilih Periode Semester yang Dikelola:
+              </label>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-[11px] font-semibold text-slate-600 dark:text-slate-400 mb-1">
+                    Tahun Ajaran
+                  </label>
+                  <select
+                    value={selectedEwYear}
+                    onChange={(e) => handleSelectEwPeriod(e.target.value, selectedEwSemester)}
+                    className="w-full px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-900 dark:text-white font-semibold"
+                  >
+                    {academicYears.map((ay) => (
+                      <option key={ay.id} value={ay.year}>
+                        {ay.year} {ay.isActive ? '(Aktif)' : ''}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-[11px] font-semibold text-slate-600 dark:text-slate-400 mb-1">
+                    Semester
+                  </label>
+                  <div className="grid grid-cols-2 gap-2">
+                    <button
+                      type="button"
+                      onClick={() => handleSelectEwPeriod(selectedEwYear, 'Ganjil')}
+                      className={`py-2 px-3 rounded-lg font-bold text-xs border transition-all cursor-pointer ${
+                        selectedEwSemester === 'Ganjil'
+                          ? 'bg-cyan-600 text-white border-cyan-600 shadow-xs'
+                          : 'bg-white dark:bg-slate-900 text-slate-600 dark:text-slate-300 border-slate-200 dark:border-slate-700 hover:bg-slate-50'
+                      }`}
+                    >
+                      Semester Ganjil
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleSelectEwPeriod(selectedEwYear, 'Genap')}
+                      className={`py-2 px-3 rounded-lg font-bold text-xs border transition-all cursor-pointer ${
+                        selectedEwSemester === 'Genap'
+                          ? 'bg-cyan-600 text-white border-cyan-600 shadow-xs'
+                          : 'bg-white dark:bg-slate-900 text-slate-600 dark:text-slate-300 border-slate-200 dark:border-slate-700 hover:bg-slate-50'
+                      }`}
+                    >
+                      Semester Genap
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Form Input Rincian Alokasi Minggu & Hari Efektif */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+              <div className="p-4 rounded-xl bg-white dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 space-y-1.5">
+                <label className="block font-bold text-slate-800 dark:text-slate-200 text-xs">
+                  Total Minggu dalam Semester
+                </label>
+                <input
+                  type="number"
+                  min={10}
+                  max={40}
+                  value={ewForm.totalWeeks}
+                  onChange={(e) => {
+                    const total = Number(e.target.value);
+                    const effective = ewForm.effectiveWeeks;
+                    setEwForm({
+                      ...ewForm,
+                      totalWeeks: total,
+                      ineffectiveWeeks: Math.max(0, total - effective),
+                    });
+                  }}
+                  className="w-full px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900 font-mono font-bold text-slate-900 dark:text-white"
+                  required
+                />
+                <span className="text-[10px] text-slate-500 block">Total minggu kalender pendidikan per semester (rata-rata 26 minggu)</span>
+              </div>
+
+              <div className="p-4 rounded-xl bg-cyan-50/60 dark:bg-cyan-950/30 border border-cyan-200 dark:border-cyan-800 space-y-1.5">
+                <label className="block font-bold text-cyan-950 dark:text-cyan-200 text-xs">
+                  Minggu Efektif KBM (ME)
+                </label>
+                <input
+                  type="number"
+                  min={5}
+                  max={30}
+                  value={ewForm.effectiveWeeks}
+                  onChange={(e) => {
+                    const effective = Number(e.target.value);
+                    const total = ewForm.totalWeeks;
+                    setEwForm({
+                      ...ewForm,
+                      effectiveWeeks: effective,
+                      ineffectiveWeeks: Math.max(0, total - effective),
+                      effectiveDays: effective * 5, // perkiraan 5 hari KBM/minggu
+                    });
+                  }}
+                  className="w-full px-3 py-2 rounded-lg border border-cyan-300 dark:border-cyan-700 bg-white dark:bg-slate-900 font-mono font-bold text-cyan-900 dark:text-cyan-200 text-base"
+                  required
+                />
+                <span className="text-[10px] text-cyan-700 dark:text-cyan-300 block">Minggu efektif pelaksanaan kegiatan belajar mengajar aktif</span>
+              </div>
+
+              <div className="p-4 rounded-xl bg-emerald-50/60 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-800 space-y-1.5">
+                <label className="block font-bold text-emerald-950 dark:text-emerald-200 text-xs flex items-center justify-between">
+                  <span>Hari Efektif Belajar (Hari KBM)</span>
+                  <span className="text-[10px] font-extrabold text-emerald-700 bg-emerald-100 dark:bg-emerald-900 px-1.5 py-0.2 rounded">Kunci Presensi</span>
+                </label>
+                <input
+                  type="number"
+                  min={20}
+                  max={150}
+                  value={ewForm.effectiveDays}
+                  onChange={(e) => setEwForm({ ...ewForm, effectiveDays: Number(e.target.value) })}
+                  className="w-full px-3 py-2 rounded-lg border border-emerald-300 dark:border-emerald-700 bg-white dark:bg-slate-900 font-mono font-bold text-emerald-900 dark:text-emerald-200 text-base"
+                  required
+                />
+                <span className="text-[10px] text-emerald-700 dark:text-emerald-300 block font-medium">Acuan pembagi persentase kehadiran: (Hadir / {ewForm.effectiveDays || 90}) × 100%</span>
+              </div>
+
+              <div className="p-4 rounded-xl bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 space-y-1.5">
+                <label className="block font-bold text-slate-800 dark:text-slate-200 text-xs">
+                  Minggu Tidak Efektif
+                </label>
+                <input
+                  type="number"
+                  min={0}
+                  max={30}
+                  value={ewForm.ineffectiveWeeks}
+                  onChange={(e) => setEwForm({ ...ewForm, ineffectiveWeeks: Number(e.target.value) })}
+                  className="w-full px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900 font-mono font-bold text-slate-900 dark:text-white"
+                />
+                <span className="text-[10px] text-slate-500 block">Libur semester, libur awal puasa, jeda tengah semester, dll.</span>
+              </div>
+
+              <div className="p-4 rounded-xl bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 space-y-1.5">
+                <label className="block font-bold text-slate-800 dark:text-slate-200 text-xs">
+                  Minggu Asesmen (PTS / PAS / PSAJ)
+                </label>
+                <input
+                  type="number"
+                  min={0}
+                  max={10}
+                  value={ewForm.assessmentWeeks}
+                  onChange={(e) => setEwForm({ ...ewForm, assessmentWeeks: Number(e.target.value) })}
+                  className="w-full px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900 font-mono font-bold text-slate-900 dark:text-white"
+                />
+                <span className="text-[10px] text-slate-500 block">Alokasi waktu penilaian sumatif tengah & akhir semester</span>
+              </div>
+
+              <div className="p-4 rounded-xl bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 space-y-1.5">
+                <label className="block font-bold text-slate-800 dark:text-slate-200 text-xs">
+                  Estimasi Hari Libur Resmi / Nasional
+                </label>
+                <input
+                  type="number"
+                  min={0}
+                  max={60}
+                  value={ewForm.holidaysCount}
+                  onChange={(e) => setEwForm({ ...ewForm, holidaysCount: Number(e.target.value) })}
+                  className="w-full px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900 font-mono font-bold text-slate-900 dark:text-white"
+                />
+                <span className="text-[10px] text-slate-500 block">Jumlah hari libur nasional & keagamaan selama semester</span>
+              </div>
+            </div>
+
+            {/* Catatan Agenda Kurikulum */}
+            <div className="space-y-1.5">
+              <label className="block font-bold text-slate-800 dark:text-slate-200 text-xs">
+                Catatan Kalender Akademik & Agenda Khusus Wakasek Kurikulum:
+              </label>
+              <textarea
+                rows={3}
+                value={ewForm.notes || ''}
+                onChange={(e) => setEwForm({ ...ewForm, notes: e.target.value })}
+                placeholder="Catatan agenda kurikulum, asesmen, atau libur khusus..."
+                className="w-full px-3.5 py-2.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white text-xs leading-relaxed"
+              />
+            </div>
+
+            {/* Info Box: Penjelasan Rumus & Sinkronisasi */}
+            <div className="p-4 rounded-xl bg-cyan-50/50 dark:bg-cyan-950/20 border border-cyan-200 dark:border-cyan-800/80 space-y-2">
+              <div className="flex items-center gap-2">
+                <Sparkles className="w-4 h-4 text-cyan-600" />
+                <span className="font-bold text-xs text-cyan-950 dark:text-cyan-200">
+                  Ringkasan Keterkaitan Data Minggu Efektif:
+                </span>
+              </div>
+              <ul className="text-[11px] text-cyan-900 dark:text-cyan-300 space-y-1 list-disc pl-4 leading-relaxed">
+                <li>
+                  Total Hari Efektif KBM (<strong>{ewForm.effectiveDays} Hari</strong>) secara otomatis menjadi batas maksimal hari hadir untuk kalkulasi persentase di menu <strong>Presensi & Kehadiran</strong> serta <strong>Rapor & Leger Wali Kelas</strong>.
+                </li>
+                <li>
+                  Wakasek Kurikulum: <strong>{profile.vicePrincipalCurriculumName || 'Dra. Hj. Nurul Hidayati, M.Pd.'}</strong> (NIP. {profile.vicePrincipalCurriculumNip || '19790815 200501 2 006'}) bertindak sebagai penanggung jawab penetapan kalender akademik.
+                </li>
+                <li>
+                  Perubahan konfigurasi akan tercatat ke dalam Audit Trail dan langsung diterapkan tanpa memerlukan muat ulang server.
+                </li>
+              </ul>
+            </div>
+
+            <div className="flex items-center justify-between pt-3 border-t border-slate-100 dark:border-slate-800">
+              <span className="text-[11px] text-slate-400">
+                Terakhir diperbarui: {ewForm.updatedAt ? `${ewForm.updatedAt} oleh ${ewForm.updatedBy || 'Wakasek Kurikulum'}` : 'Belum pernah disimpan'}
+              </span>
+              <button
+                type="submit"
+                className="flex items-center gap-2 px-5 py-2.5 text-xs font-bold rounded-lg bg-cyan-600 hover:bg-cyan-700 text-white cursor-pointer shadow-xs transition-colors"
+              >
+                <Save className="w-4 h-4" />
+                <span>Simpan Konfigurasi Minggu Efektif</span>
               </button>
             </div>
           </form>
