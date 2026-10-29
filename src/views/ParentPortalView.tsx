@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { DataService } from '../services/dataService';
 import { ParentMessage, Student, TeacherStudentMessage } from '../types';
@@ -94,7 +94,7 @@ export const ParentPortalView: React.FC<ParentPortalViewProps> = ({ initialTab =
     });
   }, [students, currentUser]);
 
-  const activeChild = myChildren.find((c) => c.id === activeChildId) || myChildren[0];
+  const activeChild = myChildren.find((c) => c.id === activeChildId) || myChildren[0] || students[0];
 
   const [printModalOpen, setPrintModalOpen] = useState(false);
 
@@ -125,7 +125,7 @@ export const ParentPortalView: React.FC<ParentPortalViewProps> = ({ initialTab =
     { subject: 'Pendidikan Agama & Budi Pekerti', kkm: 80, tugas: 94, uts: 92, akhir: 93.0, predikat: 'A' },
   ];
 
-  const childTasks = assignments.filter((a) => a.classId === activeChild.classId);
+  const childTasks = assignments.filter((a) => activeChild && a.classId === activeChild.classId);
 
   // Filtered parent messages list
   const filteredMessages = parentMessages.filter((msg) => {
