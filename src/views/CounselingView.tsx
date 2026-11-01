@@ -19,6 +19,7 @@ import {
   Calendar,
   Check,
   X,
+  Trash2,
 } from 'lucide-react';
 
 export const CounselingView: React.FC = () => {
@@ -147,7 +148,7 @@ export const CounselingView: React.FC = () => {
     setIsModalOpen(true);
   };
 
-  // Requirement 21: Hanya Guru BK yang bisa mengedit Riwayat Bimbingan dan Tindak Lanjut Konseling
+  // Requirement 21 & Request 9: Hanya Guru BK yang bisa mengedit & menghapus Riwayat Bimbingan dan Tindak Lanjut Konseling
   const handleOpenEdit = (rec: CounselingRecord) => {
     if (!isGuruBk) {
       alert('Akses Dibatasi: Hanya Guru BK yang berwenang mengubah riwayat dan tindak lanjut konseling.');
@@ -156,6 +157,21 @@ export const CounselingView: React.FC = () => {
     setEditingRecordId(rec.id);
     setFormData({ ...rec });
     setIsModalOpen(true);
+  };
+
+  const handleDeleteRecord = (rec: CounselingRecord) => {
+    if (!isGuruBk) {
+      alert('Akses Dibatasi: Hanya Guru BK yang berwenang menghapus riwayat bimbingan konseling.');
+      return;
+    }
+    if (confirm(`Apakah Anda yakin ingin menghapus catatan bimbingan konseling siswa "${rec.studentName}" tanggal ${rec.date}? Tindakan ini bersifat permanen.`)) {
+      DataService.deleteCounselingRecord(rec.id, {
+        id: currentUser.id,
+        name: currentUser.name,
+        role: currentUser.role,
+      });
+      setRecords(DataService.getCounselingRecords());
+    }
   };
 
   const handleSave = (e: React.FormEvent) => {
@@ -513,16 +529,26 @@ export const CounselingView: React.FC = () => {
                     </span>
                   )}
 
-                  {/* Requirement 21: Hanya Guru BK yang bisa mengedit Riwayat Bimbingan dan Tindak Lanjut Konseling */}
+                  {/* Requirement 21 & Request 9: Hanya Guru BK yang bisa mengedit & menghapus Riwayat Bimbingan dan Tindak Lanjut Konseling */}
                   {isGuruBk && (
-                    <button
-                      onClick={() => handleOpenEdit(rec)}
-                      className="inline-flex items-center gap-1 px-2.5 py-1 text-[11px] font-semibold rounded bg-teal-50 hover:bg-teal-100 text-teal-800 dark:bg-teal-950 dark:text-teal-200 border border-teal-200 dark:border-teal-800 transition-colors cursor-pointer"
-                      title="Edit Riwayat & Tindak Lanjut (Khusus Guru BK)"
-                    >
-                      <Edit2 className="w-3 h-3" />
-                      <span>Ubah Riwayat & Tindak Lanjut</span>
-                    </button>
+                    <div className="flex items-center gap-1.5">
+                      <button
+                        onClick={() => handleOpenEdit(rec)}
+                        className="inline-flex items-center gap-1 px-2.5 py-1 text-[11px] font-semibold rounded bg-teal-50 hover:bg-teal-100 text-teal-800 dark:bg-teal-950 dark:text-teal-200 border border-teal-200 dark:border-teal-800 transition-colors cursor-pointer"
+                        title="Edit Riwayat & Tindak Lanjut (Khusus Guru BK)"
+                      >
+                        <Edit2 className="w-3 h-3" />
+                        <span>Ubah Riwayat & Tindak Lanjut</span>
+                      </button>
+                      <button
+                        onClick={() => handleDeleteRecord(rec)}
+                        className="inline-flex items-center gap-1 px-2 py-1 text-[11px] font-semibold rounded bg-rose-50 hover:bg-rose-100 text-rose-700 dark:bg-rose-950/60 dark:text-rose-300 border border-rose-200 dark:border-rose-900 transition-colors cursor-pointer"
+                        title="Hapus Catatan Konseling (Khusus Guru BK)"
+                      >
+                        <Trash2 className="w-3 h-3" />
+                        <span>Hapus</span>
+                      </button>
+                    </div>
                   )}
                 </div>
               </div>

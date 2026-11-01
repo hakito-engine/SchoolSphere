@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import * as XLSX from 'xlsx';
 import { useAuth } from '../context/AuthContext';
 import { DataService } from '../services/dataService';
 import { Teacher, TeacherEmploymentStatus } from '../types';
@@ -17,6 +18,11 @@ import {
   Check,
   Building,
   UserCheck,
+  Download,
+  Upload,
+  FileSpreadsheet,
+  AlertCircle,
+  X,
 } from 'lucide-react';
 
 export const TeachersView: React.FC = () => {
@@ -72,6 +78,11 @@ export const TeachersView: React.FC = () => {
     position: 'Guru Mata Pelajaran',
     assignedClassIds: [],
   });
+
+  // Bulk Excel Import Modal State (Request 7 & 22)
+  const [isImportModalOpen, setIsImportModalOpen] = useState(false);
+  const [importNotice, setImportNotice] = useState<string | null>(null);
+  const [importError, setImportError] = useState<string | null>(null);
 
   const canManageTeachers = ['super_admin', 'wakasek_kurikulum', 'operator'].includes(currentUser.role);
 
@@ -189,6 +200,7 @@ export const TeachersView: React.FC = () => {
     const payload: Teacher = {
       ...(formData as Teacher),
       id: editingTeacher ? editingTeacher.id : formData.id || 'tch-' + Date.now(),
+      email: formData.email?.trim() || '',
       status: formData.status || 'aktif',
       employmentStatus: (formData.employmentStatus as TeacherEmploymentStatus) || 'PNS',
       subjectNames: formData.subjectNames && formData.subjectNames.length > 0 ? formData.subjectNames : ['Umum'],
@@ -215,12 +227,12 @@ export const TeachersView: React.FC = () => {
         {
           id: `usr-${payload.id}`,
           name: payload.name,
-          email: payload.email || `${cleanU}@smanusantara.sch.id`,
+          email: payload.email || '',
           username: cleanU,
           password: '123456',
           role: 'guru',
           nipOrNisn: payload.nip,
-          phone: payload.phone,
+          phone: payload.phone || '',
           status: 'aktif',
           position: payload.position,
         },
@@ -230,6 +242,151 @@ export const TeachersView: React.FC = () => {
 
     setTeachers(DataService.getTeachers());
     setIsModalOpen(false);
+  };
+
+  // Download Excel Template for Teachers (Request 7)
+  const handleDownloadTemplate = () => {
+    const templateData = [
+      ['No', 'Nama Lengkap Beserta Gelar', 'NIP / NUPTK (18 Digit)', 'Jabatan', 'Status Kepegawaian', 'Mata Pelajaran (Pisahkan koma jika > 1)', 'No WhatsApp / HP', 'Email'],
+      [1, 'Drs. H. Ahmad Sudrajat, M.Pd.', '19750812 200003 1 004', 'Guru Mata Pelajaran', 'PNS', 'Matematika Wajib, Fisika', '0812-3456-7890', ''],
+      [2, 'Sri Wahyuni, S.Pd., M.Si.', '19820415 200801 2 012', 'Guru Mata Pelajaran', 'PPPK', 'Bahasa Indonesia', '0813-8899-0011', ''],
+      [3, 'Budi Santoso, S.Kom.', '19900320 201802 1 005', 'Laboran / Guru Informatika', 'Honorer / Guru Tidak Tetap (GTT)', 'Informatika', '0852-1122-3344', ''],
+    ];
+
+    const ws = XLSX.utils.aoa_to_sheet(templateData);
+    ws['!cols'] = [
+      { wch: 6 },
+      { wch: 32 },
+      { wch: 25 },
+      { wch: 26 },
+      { wch: 24 },
+      { wch: 35 },
+      { wch: 20 },
+      { wch: 25 },
+    ];
+
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'Template Guru');
+    XLSX.writeFile(wb, 'Template_Data_Guru.xlsx');
+  };
+
+  // Import Excel with anti-duplication logic (Request 7 & 22)
+  const handleFileImport = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setImportNotice(null);
+    setImportError(null);
+
+    const reader = new FileReader();
+    reader.onload = (evt) => {
+      try {
+        const data = evt.target?.result;
+        const workbook = XLSX.read(data, { type: 'binary' });
+        const sheetName = workbook.SheetNames[0];
+        const sheet = workbook.Sheets[sheetName];
+        const rows: any[][] = XLSX.utils.sheet_to_json(sheet, { header: 1 });
+
+        if (!rows || rows.length < 2) {
+          setImportError('File kosong atau format template tidak sesuai.');
+          return;
+        }
+
+        const existingTeachers = DataService.getTeachers();
+        const existingNIPs = new Set(
+          existingTeachers.map((t) => (t.nip || '').replace(/[^0-9]/g, '')).filter(Boolean)
+        );
+        const existingNames = new Set(
+          existingTeachers.map((t) => t.name.toLowerCase().trim())
+        );
+
+        let addedCount = 0;
+        let duplicateCount = 0;
+
+        for (let i = 1; i < rows.length; i++) {
+          const row = rows[i];
+          if (!row || row.length === 0) continue;
+
+          const name = String(row[1] || '').trim();
+          const nip = String(row[2] || '').trim();
+          const position = String(row[3] || 'Guru Mata Pelajaran').trim();
+          const empStatus = String(row[4] || 'PNS').trim();
+          const rawSubjects = String(row[5] || 'Umum').trim();
+          const phone = String(row[6] || '').trim();
+          const email = String(row[7] || '').trim();
+
+          if (!name) continue;
+
+          const cleanNip = nip.replace(/[^0-9]/g, '');
+          const isDuplicate =
+            (cleanNip && existingNIPs.has(cleanNip)) ||
+            existingNames.has(name.toLowerCase());
+
+          if (isDuplicate) {
+            duplicateCount++;
+            continue;
+          }
+
+          const subjectNames = rawSubjects
+            .split(/[,;]/)
+            .map((s) => s.trim())
+            .filter(Boolean);
+
+          const newId = 'tch-' + Date.now() + '-' + i;
+          const newTeacher: Teacher = {
+            id: newId,
+            name,
+            nip: nip || `19900101${Date.now().toString().slice(-10)}`,
+            position,
+            employmentStatus: (empStatus as TeacherEmploymentStatus) || 'PNS',
+            subjectNames: subjectNames.length > 0 ? subjectNames : ['Umum'],
+            phone,
+            email: email || '',
+            status: 'aktif',
+            isHomeroom: false,
+            assignedClassIds: [],
+          };
+
+          DataService.saveTeacher(newTeacher, {
+            id: currentUser.id,
+            name: currentUser.name,
+            role: currentUser.role,
+          });
+
+          // Ensure login account
+          const cleanU = name.toLowerCase().replace(/[^a-z0-9]/g, '');
+          DataService.saveUser(
+            {
+              id: `usr-${newId}`,
+              name,
+              email: email || '',
+              username: cleanU,
+              password: '123456',
+              role: 'guru',
+              nipOrNisn: newTeacher.nip,
+              phone: phone || '',
+              status: 'aktif',
+              position,
+            },
+            { id: currentUser.id, name: currentUser.name, role: currentUser.role }
+          );
+
+          if (cleanNip) existingNIPs.add(cleanNip);
+          existingNames.add(name.toLowerCase());
+          addedCount++;
+        }
+
+        setTeachers(DataService.getTeachers());
+        setImportNotice(
+          `Import selesai! Berhasil menambahkan ${addedCount} data guru baru. ${duplicateCount} data yang sudah ada diabaikan agar tidak ganda.`
+        );
+      } catch (err: any) {
+        setImportError(`Gagal memproses file: ${err?.message || 'Format tidak valid'}`);
+      }
+    };
+
+    reader.readAsBinaryString(file);
+    e.target.value = '';
   };
 
   const getStatusBadgeColor = (status?: string) => {
@@ -262,13 +419,37 @@ export const TeachersView: React.FC = () => {
         </div>
 
         {canManageTeachers && (
-          <button
-            onClick={handleOpenAdd}
-            className="flex items-center gap-1.5 px-3.5 py-2 text-xs font-semibold rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white shadow-2xs transition-colors cursor-pointer"
-          >
-            <Plus className="w-4 h-4" />
-            <span>Tambah Data Guru</span>
-          </button>
+          <div className="flex items-center gap-2 flex-wrap">
+            <button
+              onClick={handleDownloadTemplate}
+              className="flex items-center gap-1.5 px-3 py-2 text-xs font-semibold rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors cursor-pointer"
+              title="Download Template Format Excel (.xlsx)"
+            >
+              <Download className="w-3.5 h-3.5 text-emerald-600" />
+              <span>Download Template (.xlsx)</span>
+            </button>
+
+            <button
+              onClick={() => {
+                setImportNotice(null);
+                setImportError(null);
+                setIsImportModalOpen(true);
+              }}
+              className="flex items-center gap-1.5 px-3 py-2 text-xs font-semibold rounded-lg border border-indigo-200 dark:border-indigo-800 bg-indigo-50 dark:bg-indigo-950/50 text-indigo-700 dark:text-indigo-300 hover:bg-indigo-100 transition-colors cursor-pointer"
+              title="Import Data Guru dari File Excel (.xlsx)"
+            >
+              <Upload className="w-3.5 h-3.5 text-indigo-600" />
+              <span>Import Data Guru (.xlsx)</span>
+            </button>
+
+            <button
+              onClick={handleOpenAdd}
+              className="flex items-center gap-1.5 px-3.5 py-2 text-xs font-semibold rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white shadow-2xs transition-colors cursor-pointer"
+            >
+              <Plus className="w-4 h-4" />
+              <span>Tambah Data Guru</span>
+            </button>
+          </div>
         )}
       </div>
 
@@ -613,11 +794,11 @@ export const TeachersView: React.FC = () => {
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="block text-slate-600 dark:text-slate-400 font-medium mb-1">
-                    Email Resmi
+                    Email Resmi <span className="text-[10px] text-slate-400 font-normal">(Opsional)</span>
                   </label>
                   <input
                     type="email"
-                    required
+                    placeholder="Boleh dikosongkan, diisi guru nanti"
                     value={formData.email || ''}
                     onChange={(e) => setFormData({ ...formData, email: e.target.value })}
                     className="w-full px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white"
@@ -641,7 +822,7 @@ export const TeachersView: React.FC = () => {
             {/* Modal Footer - Fixed at Bottom */}
             <div className="sticky bottom-0 z-20 flex items-center justify-between px-6 py-3.5 border-t border-slate-100 dark:border-slate-800 bg-slate-50/95 dark:bg-slate-800/95 backdrop-blur-xs shrink-0">
               <span className="text-[11px] text-slate-400">
-                Semua isian bertanda wajib diisi
+                Email dapat dikosongkan terlebih dahulu
               </span>
               <div className="flex items-center gap-2">
                 <button
@@ -660,6 +841,100 @@ export const TeachersView: React.FC = () => {
               </div>
             </div>
           </form>
+        </div>
+      </div>
+    )}
+
+    {/* Modal Import Data Guru Format Excel (Request 7 & 22) */}
+    {isImportModalOpen && (
+      <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
+        <div className="bg-white dark:bg-slate-900 rounded-2xl max-w-lg w-full p-6 border border-slate-200 dark:border-slate-800 shadow-2xl space-y-4 text-xs">
+          <div className="flex items-center justify-between pb-3 border-b border-slate-100 dark:border-slate-800">
+            <div className="flex items-center gap-2.5">
+              <div className="w-8 h-8 rounded-lg bg-emerald-50 dark:bg-emerald-950/60 flex items-center justify-center text-emerald-600">
+                <FileSpreadsheet className="w-5 h-5" />
+              </div>
+              <div>
+                <h3 className="font-bold text-sm text-slate-900 dark:text-white">
+                  Import Data Guru dari Excel (.xlsx)
+                </h3>
+                <p className="text-[11px] text-slate-500">
+                  Unggah file Excel yang berisi data tenaga pendidik / guru
+                </p>
+              </div>
+            </div>
+            <button
+              onClick={() => setIsImportModalOpen(false)}
+              className="p-1 rounded text-slate-400 hover:text-slate-600 dark:hover:text-slate-200"
+            >
+              <X className="w-4 h-4" />
+            </button>
+          </div>
+
+          <div className="p-3 bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800/60 rounded-xl space-y-1 text-amber-800 dark:text-amber-300 text-[11px]">
+            <p className="font-semibold flex items-center gap-1.5">
+              <AlertCircle className="w-4 h-4 shrink-0 text-amber-600" />
+              Perlindungan Data Anti-Ganda:
+            </p>
+            <p>
+              Jika data guru sudah terdaftar di aplikasi (dikenali lewat NIP atau Nama), sistem hanya akan mengimport data guru yang <strong>belum tersedia</strong>. Data yang sudah ada tidak akan diduplikasi.
+            </p>
+          </div>
+
+          {importNotice && (
+            <div className="p-3 bg-emerald-50 dark:bg-emerald-950/60 border border-emerald-200 dark:border-emerald-800 text-emerald-800 dark:text-emerald-300 rounded-xl flex items-center gap-2">
+              <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+              <span className="font-medium">{importNotice}</span>
+            </div>
+          )}
+
+          {importError && (
+            <div className="p-3 bg-rose-50 dark:bg-rose-950/60 border border-rose-200 dark:border-rose-800 text-rose-800 dark:text-rose-300 rounded-xl flex items-center gap-2">
+              <AlertCircle className="w-4 h-4 text-rose-600 shrink-0" />
+              <span className="font-medium">{importError}</span>
+            </div>
+          )}
+
+          <div className="space-y-3">
+            <div className="border-2 border-dashed border-slate-200 dark:border-slate-700 hover:border-indigo-400 dark:hover:border-indigo-600 rounded-xl p-6 text-center transition-colors">
+              <FileSpreadsheet className="w-10 h-10 text-emerald-600 mx-auto mb-2" />
+              <p className="font-semibold text-slate-800 dark:text-slate-200 mb-1">
+                Pilih Berkas Format Excel (.xlsx)
+              </p>
+              <p className="text-[11px] text-slate-500 mb-4">
+                Pastikan susunan kolom sesuai dengan Template Resmi
+              </p>
+              <label className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white font-semibold text-xs cursor-pointer shadow-xs transition-colors">
+                <Upload className="w-4 h-4" />
+                <span>Pilih File Excel</span>
+                <input
+                  type="file"
+                  accept=".xlsx, .xls"
+                  onChange={handleFileImport}
+                  className="hidden"
+                />
+              </label>
+            </div>
+
+            <div className="flex items-center justify-between pt-2">
+              <button
+                type="button"
+                onClick={handleDownloadTemplate}
+                className="flex items-center gap-1.5 text-indigo-600 dark:text-indigo-400 hover:underline font-semibold text-xs cursor-pointer"
+              >
+                <Download className="w-3.5 h-3.5" />
+                <span>Download Template Kosong (.xlsx)</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setIsImportModalOpen(false)}
+                className="px-4 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800 font-medium text-slate-700 dark:text-slate-300"
+              >
+                Tutup
+              </button>
+            </div>
+          </div>
         </div>
       </div>
     )}

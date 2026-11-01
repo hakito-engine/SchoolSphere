@@ -2,6 +2,7 @@ import React, { useState, useRef } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { DataService } from '../services/dataService';
 import { SchoolProfile, AuditLog, AcademicYearConfig, EffectiveWeekConfig } from '../types';
+import { DIST_ZIP_BASE64 } from '../data/distZipBase64';
 import { OfficialLetterhead } from '../components/common/OfficialLetterhead';
 import { formatActionText, formatRoleText } from '../utils/formatters';
 import {
@@ -77,6 +78,33 @@ export const SchoolSettingsView: React.FC = () => {
       });
   };
 
+  const [isDownloadingHosting, setIsDownloadingHosting] = useState(false);
+  const handleDownloadHostingBundle = () => {
+    setIsDownloadingHosting(true);
+    try {
+      const binaryString = atob(DIST_ZIP_BASE64);
+      const len = binaryString.length;
+      const bytes = new Uint8Array(len);
+      for (let i = 0; i < len; i++) {
+        bytes[i] = binaryString.charCodeAt(i);
+      }
+      const blob = new Blob([bytes], { type: 'application/zip' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = 'sispam-dist.zip';
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      console.error(err);
+      alert('Gagal mengekstrak berkas ZIP dari memori. Silakan coba kembali.');
+    } finally {
+      setIsDownloadingHosting(false);
+    }
+  };
+
   // Super Admin Account Settings State (Antisipasi Pergantian Admin)
   const currentAdminUser = DataService.getUsers().find((u) => u.role === 'super_admin') || currentUser;
   const [adminName, setAdminName] = useState(currentAdminUser.name || 'Bambang Haryadi, S.Kom.');
@@ -94,6 +122,7 @@ export const SchoolSettingsView: React.FC = () => {
   // MySQL Database Config state for long-term usage
   const [mysqlConfig, setMysqlConfig] = useState(() => DataService.getMySQLConfig());
   const [mysqlSavedStatus, setMysqlSavedStatus] = useState<string | null>(null);
+  const [showMysqlPassword, setShowMysqlPassword] = useState(false);
 
   // New Academic Year Modal State
   const [isAddAyModalOpen, setIsAddAyModalOpen] = useState(false);
@@ -266,15 +295,32 @@ def health():
       });
   };
 
-  const handleSaveMySQLConfig = (e: React.FormEvent) => {
+  const handleSaveMySQLConfig = async (e: React.FormEvent) => {
     e.preventDefault();
     DataService.saveMySQLConfig(mysqlConfig, {
       id: currentUser.id,
       name: currentUser.name,
       role: currentUser.role,
     });
-    setMysqlSavedStatus('Konfigurasi koneksi MySQL berhasil diperbarui dan disimpan.');
-    setTimeout(() => setMysqlSavedStatus(null), 3500);
+    setMysqlSavedStatus('Menguji dan menyimpan koneksi ke server database MySQL...');
+    try {
+      const res = await fetch('./api.php?action=save_db_config', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(mysqlConfig),
+      });
+      const data = await res.json();
+      if (res.ok && data.status === 'success') {
+        setMysqlSavedStatus(`✅ ${data.message}`);
+        // Otomatis sinkronkan data saat ini ke tabel MySQL yang baru terhubung
+        DataService.pushToServer().catch(() => {});
+      } else {
+        setMysqlSavedStatus(`⚠️ ${data.message || 'Konfigurasi tersimpan lokal. Pastikan nama database & user MySQL di cPanel sudah dibuat.'}`);
+      }
+    } catch {
+      setMysqlSavedStatus('Konfigurasi MySQL tersimpan lokal. Saat aplikasi dibuka di sispam.hakito.my.id, sistem akan otomatis terhubung ke MySQL.');
+    }
+    setTimeout(() => setMysqlSavedStatus(null), 6000);
   };
 
   const handleSaveProfile = (e: React.FormEvent) => {
@@ -2126,12 +2172,23 @@ def health():
                 <label className="block text-slate-600 dark:text-slate-400 font-semibold mb-1">
                   Password Database
                 </label>
-                <input
-                  type="password"
-                  value="••••••••••••"
-                  readOnly
-                  className="w-full px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-100 dark:bg-slate-800/80 text-slate-500 font-mono"
-                />
+                <div className="relative">
+                  <input
+                    type={showMysqlPassword ? 'text' : 'password'}
+                    value={mysqlConfig.password || ''}
+                    onChange={(e) => setMysqlConfig({ ...mysqlConfig, password: e.target.value })}
+                    className="w-full pl-3 pr-9 py-2 rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white font-mono"
+                    placeholder="Masukkan password database"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowMysqlPassword(!showMysqlPassword)}
+                    className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 cursor-pointer"
+                    title={showMysqlPassword ? 'Sembunyikan Password' : 'Lihat Password'}
+                  >
+                    {showMysqlPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                  </button>
+                </div>
               </div>
 
               <div>
@@ -2754,6 +2811,51 @@ def health():
                 <Check className="w-4 h-4" />
                 <span>Terapkan Teks JSON</span>
               </button>
+            </div>
+          </div>
+
+          {/* Unduh Paket Siap Hosting Rumahweb / cPanel */}
+          <div className="p-5 rounded-xl bg-gradient-to-br from-indigo-50/70 to-blue-50/50 dark:from-indigo-950/40 dark:to-slate-900 border border-indigo-200 dark:border-indigo-800 space-y-3 shadow-xs">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+              <div className="flex items-start gap-3">
+                <div className="w-10 h-10 rounded-xl bg-indigo-600 text-white flex items-center justify-center shrink-0 shadow-xs">
+                  <Server className="w-5 h-5" />
+                </div>
+                <div>
+                  <div className="flex items-center gap-2">
+                    <h4 className="font-bold text-sm text-slate-900 dark:text-white">
+                      Paket Berkas Siap Hosting Rumahweb / cPanel
+                    </h4>
+                    <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300">
+                      Vite Production Build (dist.zip)
+                    </span>
+                  </div>
+                  <p className="text-xs text-slate-600 dark:text-slate-400 mt-0.5 leading-relaxed">
+                    Berkas ini sudah dirakit (dikompilasi) lengkap dengan <code>index.html</code>, bundel CSS/JS, dan file <code>.htaccess</code> resmi. Tinggal upload & ekstrak di File Manager cPanel Rumahweb pada subdomain <strong>sispam.hakito.my.id</strong>.
+                  </p>
+                </div>
+              </div>
+
+              <div className="flex flex-wrap items-center gap-2 shrink-0">
+                <button
+                  type="button"
+                  onClick={handleDownloadHostingBundle}
+                  disabled={isDownloadingHosting}
+                  className="flex items-center gap-2 px-4 py-2.5 text-xs font-bold text-white bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 rounded-xl shadow-xs transition-colors cursor-pointer"
+                >
+                  <Download className="w-4 h-4" />
+                  <span>{isDownloadingHosting ? 'Sedang Mengunduh...' : 'Unduh Paket Hosting (dist.zip)'}</span>
+                </button>
+                <a
+                  href="./PANDUAN_HOSTING_RUMAHWEB.md"
+                  target="_blank"
+                  rel="noreferrer"
+                  className="flex items-center gap-1.5 px-3 py-2.5 text-xs font-medium border border-indigo-200 dark:border-indigo-800 text-indigo-700 dark:text-indigo-300 hover:bg-indigo-100/50 dark:hover:bg-indigo-950/50 rounded-xl transition-colors cursor-pointer"
+                >
+                  <FileText className="w-4 h-4" />
+                  <span>Buka Panduan Rumahweb</span>
+                </a>
+              </div>
             </div>
           </div>
 

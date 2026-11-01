@@ -79,7 +79,7 @@ export const StudentCardModal: React.FC<StudentCardModalProps> = ({
 
   const barcodeValue = student.nisn || student.nis || student.id;
   const verificationHash = `SISPAM-AUTH-ID-${barcodeValue}-${student.id.replace('std-', '').toUpperCase()}`;
-  const verificationUrl = `https://sispam.sch.id/verify/${barcodeValue}?hash=${verificationHash}`;
+  const verificationUrl = `https://sispam.hakito.my.id/verify/${barcodeValue}`;
 
   useEffect(() => {
     if (!isOpen) return;
@@ -521,7 +521,7 @@ export const StudentCardModal: React.FC<StudentCardModalProps> = ({
                     <QrCode className="w-16 h-16 text-slate-800" />
                   )}
                   <span className="font-mono text-[9px] font-bold text-indigo-600 mt-1 truncate max-w-[160px]">
-                    sispam.sch.id/verify/{student.nisn}
+                    sispam.hakito.my.id/verify/{student.nisn}
                   </span>
                   <span className="text-[9px] text-slate-500 mt-0.5">
                     2D Scanner / Kamera Smartphone

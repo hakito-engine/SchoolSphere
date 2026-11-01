@@ -94,7 +94,17 @@ export const ParentPortalView: React.FC<ParentPortalViewProps> = ({ initialTab =
     });
   }, [students, currentUser]);
 
-  const activeChild = myChildren.find((c) => c.id === activeChildId) || myChildren[0] || students[0];
+  const activeChild =
+    myChildren.find((c) => c.id === activeChildId) ||
+    myChildren[0] ||
+    students[0] || {
+      id: 'std-demo',
+      name: 'Peserta Didik',
+      className: 'X MIPA 1',
+      attendance: { hadir: 0, sakit: 0, izin: 0, alpa: 0, dispen: 0 },
+      gpa: 85,
+      nisn: '0000000000',
+    };
 
   const [printModalOpen, setPrintModalOpen] = useState(false);
 
@@ -875,14 +885,14 @@ export const ParentPortalView: React.FC<ParentPortalViewProps> = ({ initialTab =
                 98.1%
               </p>
               <p className="text-[11px] text-slate-500 mt-0.5">
-                {activeChild.attendance.hadir} Hadir · {activeChild.attendance.sakit} Sakit · {activeChild.attendance.izin} Izin · {activeChild.attendance.alpa} Alpa
+                {activeChild?.attendance?.hadir ?? 0} Hadir · {activeChild?.attendance?.sakit ?? 0} Sakit · {activeChild?.attendance?.izin ?? 0} Izin · {activeChild?.attendance?.alpa ?? 0} Alpa
               </p>
             </div>
 
             <div className="p-4 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800">
               <span className="text-xs text-slate-500">Rerata Nilai Kumulatif</span>
               <p className="text-2xl font-bold text-indigo-600 font-mono tabular-nums mt-1">
-                {activeChild.gpa}
+                {activeChild?.gpa ?? 0}
               </p>
               <p className="text-[11px] text-emerald-600 font-semibold mt-0.5">
                 Predikat: A (Sangat Memuaskan)
@@ -905,7 +915,7 @@ export const ParentPortalView: React.FC<ParentPortalViewProps> = ({ initialTab =
                 Terverifikasi Lengkap
               </p>
               <p className="text-[11px] text-slate-500 mt-0.5 font-mono">
-                NISN: {activeChild.nisn}
+                NISN: {activeChild?.nisn || '-'}
               </p>
             </div>
           </div>

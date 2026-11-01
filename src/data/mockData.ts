@@ -24,6 +24,9 @@ import {
   EffectiveWeekConfig,
   StudentExtracurricular,
   SubjectLearningObjective,
+  DutySchedule,
+  StaffMember,
+  DutyJournal,
 } from '../types';
 
 export const INITIAL_SCHOOL_PROFILE: SchoolProfile = {
@@ -1730,4 +1733,316 @@ export const INITIAL_LEARNING_OBJECTIVES: SubjectLearningObjective[] = [
     teacherName: 'H. Ahmad Dahlan, Lc.',
   },
 ];
+
+// ==========================================
+// DATA PEGAWAI / TENAGA KEPENDIDIKAN (TENDIK)
+// ==========================================
+export const INITIAL_STAFF: StaffMember[] = [
+  {
+    id: 'stf-01',
+    nip: '19780215 200501 1 003',
+    name: 'Suherman, S.AP.',
+    position: 'Kepala Tata Usaha (KTU)',
+    phone: '0812-3344-5566',
+    status: 'aktif',
+  },
+  {
+    id: 'stf-02',
+    nip: '19850912 201001 2 011',
+    name: 'Maryani, A.Md.',
+    position: 'Staf Administrasi & Kesiswaan',
+    phone: '0813-4455-6677',
+    status: 'aktif',
+  },
+  {
+    id: 'stf-03',
+    nip: '19881104 201402 1 005',
+    name: 'Ahmad Sobari, S.Kom.',
+    position: 'Teknisi IT & Laboran Komputer',
+    phone: '0852-5566-7788',
+    status: 'aktif',
+  },
+  {
+    id: 'stf-04',
+    nip: '19900318 201503 2 007',
+    name: 'Siti Khadijah, S.I.Pust.',
+    position: 'Pustakawan Sekolah',
+    phone: '0857-6677-8899',
+    status: 'aktif',
+  },
+  {
+    id: 'stf-05',
+    name: 'Joko Santoso',
+    position: 'Koordinator Keamanan / Satpam',
+    phone: '0821-7788-9900',
+    status: 'aktif',
+  },
+  {
+    id: 'stf-06',
+    name: 'Bambang Triyono',
+    position: 'Petugas Keamanan Gerbang',
+    phone: '0822-8899-0011',
+    status: 'aktif',
+  },
+  {
+    id: 'stf-07',
+    name: 'Wahyu Hidayat',
+    position: 'Staf Kebersihan & Sarpras Lapangan',
+    phone: '0823-9900-1122',
+    status: 'aktif',
+  },
+];
+
+// ==========================================
+// JADWAL PIKET RESMI MINGGUAN (SENIN - SABTU)
+// ==========================================
+export const INITIAL_DUTY_SCHEDULES: DutySchedule[] = [
+  {
+    id: 'piket-senin',
+    day: 'Senin',
+    academicYear: '2024/2025',
+    semester: 'Ganjil',
+    standbyLocation: 'Pos Piket Lobi Utama',
+    dutyOfficers: [
+      { teacherId: 'tch-01', teacherName: 'Hendra Wijaya, S.Pd., M.Si.', role: 'Piket 1', phone: '0812-3456-7890' },
+      { teacherId: 'tch-03', teacherName: 'Siti Aminah, S.Pd.', role: 'Piket 2', phone: '0814-5678-9012' },
+      { teacherId: 'tch-05', teacherName: 'Ahmad Fauzi, S.Pd.', role: 'Piket 3', phone: '0811-4455-6677' },
+      { teacherId: 'tch-02', teacherName: 'Dra. Hj. Nurhayati, M.Pd.', role: 'Koordinator', phone: '0813-4567-8901' },
+    ],
+    notes: 'Fokus pengawasan gerbang pagi (06:30 - 07:15) dan keteraturan upacara bendera.',
+  },
+  {
+    id: 'piket-selasa',
+    day: 'Selasa',
+    academicYear: '2024/2025',
+    semester: 'Ganjil',
+    standbyLocation: 'Pos Piket Lobi Utama',
+    dutyOfficers: [
+      { teacherId: 'tch-04', teacherName: 'Budi Santoso, S.Pd.', role: 'Piket 1', phone: '0815-6789-0123' },
+      { teacherId: 'tch-06', teacherName: 'Rina Marlina, M.Pd.', role: 'Piket 2', phone: '0812-5566-7788' },
+      { teacherId: 'tch-07', teacherName: 'Ferry Gunawan, M.Hum.', role: 'Piket 3', phone: '0813-6677-8899' },
+      { teacherId: 'tch-rustan', teacherName: 'Rustan Effendi, S.Pd.', role: 'Koordinator', phone: '0812-7766-5544' },
+    ],
+    notes: 'Pemeriksaan ketepatan pergantian jam pelajaran dan keliling kelas.',
+  },
+  {
+    id: 'piket-rabu',
+    day: 'Rabu',
+    academicYear: '2024/2025',
+    semester: 'Ganjil',
+    standbyLocation: 'Pos Piket Lobi Utama',
+    dutyOfficers: [
+      { teacherId: 'tch-dewi', teacherName: 'Dewi Sartika, M.Si.', role: 'Piket 1', phone: '0812-9988-7766' },
+      { teacherId: 'tch-eko', teacherName: 'Eko Prasetyo, S.Kom.', role: 'Piket 2', phone: '0813-1122-3344' },
+      { teacherId: 'tch-rustan', teacherName: 'Rustan Effendi, S.Pd.', role: 'Piket 3', phone: '0812-7766-5544' },
+      { teacherId: 'tch-01', teacherName: 'Hendra Wijaya, S.Pd., M.Si.', role: 'Koordinator', phone: '0812-3456-7890' },
+    ],
+    notes: 'Pengawasan kegiatan literasi pagi dan penanganan siswa izin/terlambat.',
+  },
+  {
+    id: 'piket-kamis',
+    day: 'Kamis',
+    academicYear: '2024/2025',
+    semester: 'Ganjil',
+    standbyLocation: 'Pos Piket Lobi Utama',
+    dutyOfficers: [
+      { teacherId: 'tch-rini', teacherName: 'Rini Kusuma, M.Pd.', role: 'Piket 1', phone: '0813-8899-0011' },
+      { teacherId: 'tch-05', teacherName: 'Ahmad Fauzi, S.Pd.', role: 'Piket 2', phone: '0811-4455-6677' },
+      { teacherId: 'tch-03', teacherName: 'Siti Aminah, S.Pd.', role: 'Piket 3', phone: '0814-5678-9012' },
+      { teacherId: 'tch-04', teacherName: 'Budi Santoso, S.Pd.', role: 'Koordinator', phone: '0815-6789-0123' },
+    ],
+    notes: 'Pemantauan jam istirahat dan ketertiban kantin serta mushola.',
+  },
+  {
+    id: 'piket-jumat',
+    day: 'Jumat',
+    academicYear: '2024/2025',
+    semester: 'Ganjil',
+    standbyLocation: 'Pos Piket Lobi Utama',
+    dutyOfficers: [
+      { teacherId: 'tch-07', teacherName: 'Ferry Gunawan, M.Hum.', role: 'Piket 1', phone: '0813-6677-8899' },
+      { teacherId: 'tch-dewi', teacherName: 'Dewi Sartika, M.Si.', role: 'Piket 2', phone: '0812-9988-7766' },
+      { teacherId: 'tch-06', teacherName: 'Rina Marlina, M.Pd.', role: 'Piket 3', phone: '0812-5566-7788' },
+      { teacherId: 'tch-02', teacherName: 'Dra. Hj. Nurhayati, M.Pd.', role: 'Koordinator', phone: '0813-4567-8901' },
+    ],
+    notes: 'Pengawasan Sholat Jumat berjamaah dan penertiban kepulangan siang.',
+  },
+  {
+    id: 'piket-sabtu',
+    day: 'Sabtu',
+    academicYear: '2024/2025',
+    semester: 'Ganjil',
+    standbyLocation: 'Pos Piket Lobi Utama',
+    dutyOfficers: [
+      { teacherId: 'tch-01', teacherName: 'Hendra Wijaya, S.Pd., M.Si.', role: 'Piket 1', phone: '0812-3456-7890' },
+      { teacherId: 'tch-04', teacherName: 'Budi Santoso, S.Pd.', role: 'Piket 2', phone: '0815-6789-0123' },
+      { teacherId: 'tch-eko', teacherName: 'Eko Prasetyo, S.Kom.', role: 'Piket 3', phone: '0813-1122-3344' },
+      { teacherId: 'tch-rustan', teacherName: 'Rustan Effendi, S.Pd.', role: 'Koordinator', phone: '0812-7766-5544' },
+    ],
+    notes: 'Pengawasan kegiatan ekstrakurikuler, pembinaan bakat, dan organisasi siswa.',
+  },
+];
+
+// ==========================================
+// RIWAYAT JURNAL PIKET HARIAN AWAL
+// ==========================================
+export const INITIAL_DUTY_JOURNALS: DutyJournal[] = [
+  {
+    id: 'jrn-piket-demo-01',
+    date: new Date().toISOString().substring(0, 10),
+    day: 'Senin',
+    academicYear: '2024/2025',
+    semester: 'Ganjil',
+    officer1Id: 'tch-01',
+    officer1Name: 'Hendra Wijaya, S.Pd., M.Si.',
+    officer1Nip: '19750315 200003 1 004',
+    officer2Id: 'tch-03',
+    officer2Name: 'Siti Aminah, S.Pd.',
+    officer2Nip: '19820412 200604 2 018',
+    officer3Id: 'tch-05',
+    officer3Name: 'Ahmad Fauzi, S.Pd.',
+    officer3Nip: '19890915 201403 1 003',
+    headmasterName: 'Drs. H. Suryadi, M.M.',
+    headmasterNip: '19680512 199303 1 004',
+    teachersPresent: [
+      {
+        id: 'tp-1',
+        teacherId: 'tch-01',
+        teacherName: 'Hendra Wijaya, S.Pd., M.Si.',
+        status: 'hadir',
+        slots: [
+          { classId: 'cls-xmipa1', className: 'X MIPA 1', subjectName: 'Matematika Wajib', period: 'Jam ke-1 s.d 2 (07.15 - 08.45)', isVerified: true, notes: 'Materi Persamaan Kuadrat lancar' },
+          { classId: 'cls-ximipa1', className: 'XI MIPA 1', subjectName: 'Matematika Peminatan', period: 'Jam ke-5 s.d 6 (11.00 - 12.30)', isVerified: true, notes: 'Latihan Soal Polinomial' },
+        ]
+      },
+      {
+        id: 'tp-2',
+        teacherId: 'tch-04',
+        teacherName: 'Budi Santoso, S.Pd.',
+        status: 'hadir',
+        slots: [
+          { classId: 'cls-xmipa2', className: 'X MIPA 2', subjectName: 'Fisika', period: 'Jam ke-3 s.d 4 (09.00 - 10.30)', isVerified: true, notes: 'Praktikum Hukum Newton di Lab Fisika' }
+        ]
+      },
+      {
+        id: 'tp-3',
+        teacherId: 'tch-03',
+        teacherName: 'Siti Aminah, S.Pd.',
+        status: 'hadir',
+        slots: [
+          { classId: 'cls-xips1', className: 'X IPS 1', subjectName: 'Sosiologi', period: 'Jam ke-1 s.d 2 (07.15 - 08.45)', isVerified: true, notes: 'Diskusi Kelompok Interaksi Sosial' }
+        ]
+      }
+    ],
+    teachersAbsent: [
+      {
+        id: 'ta-1',
+        teacherId: 'tch-06',
+        teacherName: 'Rina Marlina, M.Pd.',
+        status: 'tidak_hadir',
+        absenceReason: 'Sakit',
+        absenceNotes: 'Izin sakit demam (surat dokter terlampir di meja piket)',
+        slots: [
+          { classId: 'cls-xips1', className: 'X IPS 1', subjectName: 'Bahasa Indonesia', period: 'Jam ke-3 s.d 4 (09.00 - 10.30)', isVerified: true, substituteTeacherId: 'tch-01', substituteTeacherName: 'Hendra Wijaya, S.Pd., M.Si.', notes: 'Guru piket memberikan modul tugas membaca teks eksposisi' }
+        ]
+      }
+    ],
+    staffPresent: [
+      { id: 'sp-1', staffId: 'stf-01', staffName: 'Suherman, S.AP.', position: 'Kepala Tata Usaha', status: 'hadir', checkInTime: '06:45', checkOutTime: '15:30' },
+      { id: 'sp-2', staffId: 'stf-02', staffName: 'Maryani, A.Md.', position: 'Staf Administrasi', status: 'hadir', checkInTime: '06:50', checkOutTime: '15:30' },
+      { id: 'sp-3', staffId: 'stf-05', staffName: 'Joko Santoso', position: 'Koordinator Satpam', status: 'hadir', checkInTime: '06:20', checkOutTime: '16:00' },
+      { id: 'sp-4', staffId: 'stf-04', staffName: 'Siti Khadijah, S.I.Pust.', position: 'Pustakawan', status: 'hadir', checkInTime: '07:00', checkOutTime: '15:30' },
+    ],
+    staffAbsent: [
+      { id: 'sa-1', staffId: 'stf-07', staffName: 'Wahyu Hidayat', position: 'Staf Kebersihan', status: 'tidak_hadir', absenceReason: 'Izin', absenceNotes: 'Mengurus dokumen keluarga mendadak' }
+    ],
+    guests: [
+      {
+        id: 'gst-1',
+        fullName: 'Ir. Gunawan Wibowo, M.T.',
+        address: 'Jl. Pemuda No. 45, Semarang',
+        officeAddress: 'Cabang Dinas Pendidikan Wilayah I',
+        phone: '0812-9988-1122',
+        time: '09:15',
+        purpose: 'Supervisi dan Monitoring Pelaksanaan Asesmen Sekolah',
+        personToMeet: 'Kepala Sekolah (Drs. H. Suryadi, M.M.)',
+        followUp: 'Diterima langsung di Ruang Kepala Sekolah. Diskusi berjalan lancar.',
+      },
+      {
+        id: 'gst-2',
+        fullName: 'Ibu Ratna Juwita',
+        address: 'Komplek Griya Asri Blok C-12',
+        officeAddress: 'Pribadi / Wiraswasta',
+        phone: '0813-7766-5544',
+        time: '10:30',
+        purpose: 'Izin Menjemput Siswa (Aditia Pratama - X MIPA 1) untuk Kontrol Medis Rumah Sakit',
+        personToMeet: 'Guru Piket & Wali Kelas X MIPA 1',
+        followUp: 'Surat Izin Keluar Lingkungan Sekolah telah diterbitkan guru piket. Siswa diizinkan pulang jam 10.45.',
+      }
+    ],
+    studentAttendance: [
+      {
+        classId: 'cls-xmipa1',
+        className: 'X MIPA 1',
+        totalPresent: 34,
+        absentStudents: [
+          { studentId: 'std-02', studentName: 'Dimas Aditya Pratama', status: 'sakit', notes: 'Surat izin dokter ada' },
+          { studentId: 'std-03', studentName: 'Rizki Ramadhan', status: 'izin', notes: 'Izin acara keluarga' },
+        ]
+      },
+      {
+        classId: 'cls-xmipa2',
+        className: 'X MIPA 2',
+        totalPresent: 35,
+        absentStudents: [
+          { studentId: 'std-08', studentName: 'Nabila Putri Zahra', status: 'terlambat', notes: 'Terlambat 15 menit (ban bocor), pembinaan di pos piket' }
+        ]
+      },
+      {
+        classId: 'cls-ximipa1',
+        className: 'XI MIPA 1',
+        totalPresent: 36,
+        absentStudents: []
+      },
+      {
+        classId: 'cls-xips1',
+        className: 'X IPS 1',
+        totalPresent: 34,
+        absentStudents: [
+          { studentId: 'std-14', studentName: 'Fajar Nugraha', status: 'alpa', notes: 'Tanpa kabar dari orang tua' },
+          { studentId: 'std-15', studentName: 'Dina Lestari', status: 'cepat_pulang', notes: 'Izin pulang jam 11.00 karena migrain' }
+        ]
+      }
+    ],
+    incidents: [
+      {
+        id: 'inc-1',
+        time: '07:15',
+        description: 'Penertiban siswa terlambat sebanyak 3 siswa pada jam awal masuk sekolah.',
+        partiesInvolved: 'Siswa Terlambat & Petugas Piket Pos Gerbang',
+        involvesStudents: true,
+        involvedStudentIds: ['std-08'],
+        involvedStudentNames: ['Nabila Putri Zahra (X MIPA 2)'],
+        followUp: 'Pembinaan kedisiplinan dan literasi/tahsin di meja piket selama 15 menit, selanjutnya diizinkan masuk mengikuti jam pelajaran berikutnya.',
+        referredToBK: false,
+      },
+      {
+        id: 'inc-2',
+        time: '10:00',
+        description: 'Siswa kelas XI MIPA 1 mengalami keluhan pusing dan mual saat jam istirahat pertama.',
+        partiesInvolved: 'Siswa Ybs, Tim PMR, & Petugas Piket',
+        involvesStudents: true,
+        involvedStudentIds: ['std-05'],
+        involvedStudentNames: ['Bima Sakti (XI MIPA 1)'],
+        followUp: 'Diistirahatkan di ruang UKS, diberi teh hangat dan penanganan oleh petugas PMR. Siswa pulih jam 11.30 dan kembali ke kelas.',
+        referredToBK: false,
+      }
+    ],
+    generalNotes: 'Kegiatan belajar mengajar secara umum berlangsung tertib, aman, kondusif, dan seluruh pergantian jam dipantau tepat waktu.',
+    createdAt: new Date().toISOString(),
+    createdBy: 'Hendra Wijaya, S.Pd., M.Si.',
+    status: 'submitted',
+  }
+];
+
 

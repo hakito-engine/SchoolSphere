@@ -14,6 +14,8 @@ import {
   X,
   LogOut,
   KeyRound,
+  Cloud,
+  RefreshCw,
 } from 'lucide-react';
 
 interface NavbarProps {
@@ -38,6 +40,23 @@ export const Navbar: React.FC<NavbarProps> = ({
 
   const [notifications, setNotifications] = useState(() => DataService.getNotifications());
   const [showNotifications, setShowNotifications] = useState(false);
+  const [isSyncing, setIsSyncing] = useState(false);
+  const [syncNotice, setSyncNotice] = useState<string | null>(null);
+
+  const handleManualSync = async () => {
+    setIsSyncing(true);
+    try {
+      await DataService.pullFromServer();
+      await DataService.pushToServer();
+      setSyncNotice('Tersinkron');
+      setTimeout(() => setSyncNotice(null), 3000);
+    } catch {
+      setSyncNotice('Offline');
+      setTimeout(() => setSyncNotice(null), 3000);
+    } finally {
+      setIsSyncing(false);
+    }
+  };
 
   // Requirement 9: Notifikasi Koreksi Nilai dari guru mapel hanya muncul di akun siswa yang dinilai
   const visibleNotifications = notifications.filter((item) => {
@@ -141,6 +160,18 @@ export const Navbar: React.FC<NavbarProps> = ({
           <span className="font-semibold">{activeAY.year}</span>
           <span className="text-slate-400">({activeAY.semester})</span>
         </div>
+
+        {/* Tombol Cloud Sync Server sispam.hakito.my.id */}
+        <button
+          type="button"
+          onClick={handleManualSync}
+          disabled={isSyncing}
+          className="flex items-center gap-1.5 px-2.5 py-1.5 text-xs rounded-lg bg-indigo-50 dark:bg-indigo-950/60 text-indigo-700 dark:text-indigo-300 border border-indigo-200/80 dark:border-indigo-800/80 hover:bg-indigo-100 dark:hover:bg-indigo-900/60 transition-colors cursor-pointer"
+          title="Sinkronkan data dengan server hosting sispam.hakito.my.id"
+        >
+          <Cloud className={`w-3.5 h-3.5 ${isSyncing ? 'animate-pulse text-amber-500' : 'text-emerald-500'}`} />
+          <span className="font-semibold">{isSyncing ? 'Menyinkronkan...' : syncNotice ? syncNotice : 'Cloud Sync'}</span>
+        </button>
       </div>
 
       {/* Kanan: Notifikasi, Dark Mode, Avatar & Profil */}

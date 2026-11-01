@@ -324,8 +324,42 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ onNavigate }) => {
   const counseling = DataService.getCounselingRecords();
   const announcements = DataService.getAnnouncements();
 
-  // Child data for parent portal
-  const activeChild = students.find((s) => s.id === activeChildId) || students[0];
+  // Parent Children resolution with safe fallback
+  const parentChildren = useMemo(() => {
+    if (currentUser.role !== 'orang_tua') return students;
+    const matched = students.filter((s) => {
+      if (currentUser.childrenIds && currentUser.childrenIds.includes(s.id)) return true;
+      if (s.parentId && s.parentId === currentUser.id) return true;
+      if (
+        currentUser.phone &&
+        s.parentPhone &&
+        currentUser.phone.replace(/[^0-9]/g, '') === s.parentPhone.replace(/[^0-9]/g, '')
+      ) {
+        return true;
+      }
+      if (
+        currentUser.name &&
+        s.parentName &&
+        currentUser.name.trim().toLowerCase() === s.parentName.trim().toLowerCase()
+      ) {
+        return true;
+      }
+      return false;
+    });
+    return matched.length > 0 ? matched : (students.length > 0 ? [students[0]] : []);
+  }, [students, currentUser]);
+
+  const activeChild =
+    parentChildren.find((s) => s.id === activeChildId) ||
+    parentChildren[0] ||
+    students[0] || {
+      id: 'std-demo',
+      name: 'Peserta Didik',
+      className: 'X MIPA 1',
+      attendance: { hadir: 0, sakit: 0, izin: 0, alpa: 0, dispen: 0 },
+      gpa: 85,
+      nisn: '0000000000',
+    };
 
   const todayFormatted = new Date().toLocaleDateString('id-ID', {
     weekday: 'long',
@@ -1086,51 +1120,46 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ onNavigate }) => {
                 Pilih profil anak yang ingin Anda pantau perkembangannya hari ini:
               </p>
             </div>
-            <div className="flex items-center gap-2">
-              <button
-                onClick={() => setActiveChildId('std-ahmad')}
-                className={`px-3 py-1.5 text-xs font-bold rounded-lg transition-colors cursor-pointer ${
-                  activeChild.id === 'std-ahmad'
-                    ? 'bg-orange-600 text-white shadow-xs'
-                    : 'bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 border border-orange-200'
-                }`}
-              >
-                Ahmad Fauzi (X MIPA 1)
-              </button>
-              <button
-                onClick={() => setActiveChildId('std-siti')}
-                className={`px-3 py-1.5 text-xs font-bold rounded-lg transition-colors cursor-pointer ${
-                  activeChild.id === 'std-siti'
-                    ? 'bg-orange-600 text-white shadow-xs'
-                    : 'bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 border border-orange-200'
-                }`}
-              >
-                Siti Fauziah (X MIPA 2)
-              </button>
+            <div className="flex items-center gap-2 flex-wrap">
+              {parentChildren.map((child) => (
+                <button
+                  key={child.id}
+                  onClick={() => setActiveChildId(child.id)}
+                  className={`px-3 py-1.5 text-xs font-bold rounded-lg transition-colors cursor-pointer ${
+                    activeChild?.id === child.id
+                      ? 'bg-orange-600 text-white shadow-xs'
+                      : 'bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 border border-orange-200 dark:border-orange-900'
+                  }`}
+                >
+                  {child.name} ({child.className})
+                </button>
+              ))}
             </div>
           </div>
 
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
             <div className="p-4 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800">
-              <span className="text-xs text-slate-500">Presensi {activeChild.name}</span>
+              <span className="text-xs text-slate-500">Presensi {activeChild?.name || 'Siswa'}</span>
               <p className="text-2xl font-bold text-emerald-600 font-mono tabular-nums mt-1">
                 98.2%
               </p>
-              <p className="text-[11px] text-slate-500 mt-0.5">{activeChild.attendance.hadir} Hadir, 0 Alpa</p>
+              <p className="text-[11px] text-slate-500 mt-0.5">
+                {activeChild?.attendance?.hadir ?? 0} Hadir, {activeChild?.attendance?.alpa ?? 0} Alpa
+              </p>
             </div>
             <div className="p-4 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800">
               <span className="text-xs text-slate-500">Nilai Rata-rata</span>
               <p className="text-2xl font-bold text-indigo-600 font-mono tabular-nums mt-1">
-                {activeChild.gpa}
+                {activeChild?.gpa ?? 0}
               </p>
               <p className="text-[11px] text-emerald-600 mt-0.5">Predikat Sangat Baik</p>
             </div>
             <div className="p-4 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800">
               <span className="text-xs text-slate-500">Kelas & Rombel</span>
               <p className="text-2xl font-bold text-slate-900 dark:text-white font-mono tabular-nums mt-1">
-                {activeChild.className}
+                {activeChild?.className || '-'}
               </p>
-              <p className="text-[11px] text-slate-500 mt-0.5">Wali: Budi Santoso, S.Si.</p>
+              <p className="text-[11px] text-slate-500 mt-0.5">Wali: Terhubung</p>
             </div>
             <div className="p-4 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800">
               <span className="text-xs text-slate-500">Status Pembelajaran</span>

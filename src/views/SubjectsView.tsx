@@ -1088,7 +1088,7 @@ export const SubjectsView: React.FC = () => {
       {/* Modal Add / Edit Subject */}
       {isModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-          <div className="bg-white dark:bg-slate-900 rounded-xl max-w-md w-full p-6 border border-slate-200 dark:border-slate-800 shadow-xl">
+          <div className="bg-white dark:bg-slate-900 rounded-xl max-w-lg w-full max-h-[88vh] overflow-y-auto p-6 border border-slate-200 dark:border-slate-800 shadow-xl">
             <h3 className="text-sm font-bold text-slate-900 dark:text-white mb-4">
               {editingSubject ? 'Ubah Mata Pelajaran' : 'Tambah Mata Pelajaran Baru'}
             </h3>

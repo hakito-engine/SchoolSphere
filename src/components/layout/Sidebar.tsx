@@ -23,6 +23,8 @@ import {
   ChevronRight,
   MessageSquare,
   Award,
+  ClipboardCheck,
+  Briefcase,
 } from 'lucide-react';
 
 interface SidebarProps {
@@ -69,6 +71,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
       items: [
         { id: 'modules', label: 'Modul Pembelajaran', icon: BookOpen, module: 'modules' },
         { id: 'attendance', label: 'Presensi & Kehadiran', icon: CalendarCheck, module: 'attendance' },
+        { id: 'piket', label: 'Piket', icon: ClipboardCheck, module: 'piket' },
         { id: 'journals', label: 'Jurnal Mengajar', icon: FileSpreadsheet, module: 'journals' },
         { id: 'assignments', label: 'Tugas & Penilaian', icon: GraduationCap, module: 'assignments' },
         { id: 'homeroom_reports', label: 'Rapor & Leger Wali Kelas', icon: Award, module: 'homeroom_reports' },
@@ -82,6 +85,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
         { id: 'teachers', label: 'Tenaga Pendidik', icon: UserSquare2, module: 'teachers' },
         { id: 'classes', label: 'Rombel & Kelas', icon: School, module: 'classes' },
         { id: 'subjects', label: 'Mata Pelajaran', icon: BookMarked, module: 'subjects' },
+        { id: 'tendik', label: 'Tendik', icon: Briefcase, module: 'tendik' },
       ],
     },
     {
@@ -97,8 +101,8 @@ export const Sidebar: React.FC<SidebarProps> = ({
       title: 'Sistem & Administrasi',
       items: [
         { id: 'users', label: 'Manajemen Pengguna', icon: ShieldCheck, module: 'users' },
-        { id: 'settings', label: 'Pengaturan & Kop Surat', icon: Settings, module: 'settings' },
-        { id: 'backup_audit', label: 'Audit Trail & Backup', icon: Database, module: 'audit' },
+        { id: 'settings', label: 'Pengaturan Sekolah', icon: Settings, module: 'settings' },
+        { id: 'system_management', label: 'Manajemen Sistem & Audit', icon: Database, module: 'system_management' },
       ],
     },
   ];

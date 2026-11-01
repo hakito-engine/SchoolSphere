@@ -74,6 +74,13 @@ export const ROLE_DEFINITIONS: Record<Role, RoleInfo> = {
     description: 'Wakil Kepala Sekolah Bidang Kurikulum.',
     responsibilities: ['Penyusunan Jadwal & Kurikulum', 'Penugasan Mengajar Guru'],
   },
+  tendik: {
+    role: 'tendik',
+    label: 'Tenaga Kependidikan (Tendik)',
+    badgeColor: 'bg-stone-100 text-stone-800 dark:bg-stone-800/40 dark:text-stone-300',
+    description: 'Pengelolaan administrasi TU, sarpras, perpustakaan, keamanan, dan kebersihan.',
+    responsibilities: ['Presensi & Jam Kerja Harian', 'Pelayanan Administrasi Sekolah', 'Piket & Pengelolaan Tamu'],
+  },
 };
 
 export function cleanUsername(input: string): string {
@@ -247,9 +254,48 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       );
     }
     localStorage.removeItem('schoolsphere_auth_user_id');
+    localStorage.removeItem('schoolsphere_last_activity_time');
     setIsAuthenticated(false);
     setPersistedUserId(null);
   };
+
+  // Otomatis logout jika user tidak melakukan aktivitas selama 24 jam (Request 17)
+  useEffect(() => {
+    if (!isAuthenticated) return;
+    const INACTIVITY_LIMIT_MS = 24 * 60 * 60 * 1000; // 24 jam
+
+    const recordActivity = () => {
+      try {
+        localStorage.setItem('schoolsphere_last_activity_time', Date.now().toString());
+      } catch {}
+    };
+
+    if (!localStorage.getItem('schoolsphere_last_activity_time')) {
+      recordActivity();
+    }
+
+    const checkInactivity = () => {
+      try {
+        const lastStr = localStorage.getItem('schoolsphere_last_activity_time');
+        if (lastStr) {
+          const lastTime = parseInt(lastStr, 10);
+          if (Date.now() - lastTime > INACTIVITY_LIMIT_MS) {
+            logout();
+            alert('Sesi Anda telah berakhir secara otomatis karena tidak ada aktivitas selama 24 jam. Silakan masuk kembali.');
+          }
+        }
+      } catch {}
+    };
+
+    const interval = setInterval(checkInactivity, 60000); // Cek setiap 1 menit
+    const events = ['mousedown', 'keydown', 'scroll', 'touchstart'];
+    events.forEach((ev) => window.addEventListener(ev, recordActivity, { passive: true }));
+
+    return () => {
+      clearInterval(interval);
+      events.forEach((ev) => window.removeEventListener(ev, recordActivity));
+    };
+  }, [isAuthenticated]);
 
   const updateUserPassword = (newPass: string): boolean => {
     if (!currentUser) return false;
@@ -357,8 +403,14 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       case 'parent_messages':
         return ['super_admin', 'wakasek_kurikulum', 'guru_bk', 'wali_kelas', 'guru', 'orang_tua'].includes(role);
       case 'analytics':
-        return ['super_admin', 'kepala_sekolah', 'wakasek_kurikulum', 'guru_bk', 'wali_kelas'].includes(role);
+        return ['super_admin', 'kepala_sekolah', 'wakasek_kurikulum', 'operator', 'guru', 'wali_kelas', 'guru_bk'].includes(role);
+      case 'piket':
+        // Orang tua dan siswa tidak memiliki akses ke modul Piket (Request 20.8)
+        return ['super_admin', 'kepala_sekolah', 'wakasek_kurikulum', 'operator', 'guru', 'wali_kelas', 'guru_bk', 'tendik'].includes(role);
+      case 'tendik':
+        return ['super_admin', 'kepala_sekolah', 'wakasek_kurikulum', 'operator', 'guru', 'wali_kelas', 'tendik'].includes(role);
       case 'settings':
+      case 'system_management':
       case 'backup':
       case 'audit':
         return ['super_admin', 'wakasek_kurikulum'].includes(role);

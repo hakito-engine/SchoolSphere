@@ -38,9 +38,15 @@ jobs:
       - name: Setup Pages
         uses: actions/configure-pages@v4
 
-      - name: Upload Artifact
+      - name: Upload Pages Artifact
         uses: actions/upload-pages-artifact@v3
         with:
+          path: './dist'
+
+      - name: Upload Downloadable ZIP Artifact (Khusus cPanel / Rumahweb)
+        uses: actions/upload-artifact@v4
+        with:
+          name: sispam-rumahweb-dist
           path: './dist'
 
       - name: Deploy to GitHub Pages

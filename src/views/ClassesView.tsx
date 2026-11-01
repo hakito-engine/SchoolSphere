@@ -17,6 +17,7 @@ const DEFAULT_MAJORS = [
 export const ClassesView: React.FC = () => {
   const { currentUser, refreshUsers } = useAuth();
   const [classes, setClasses] = useState<ClassRoom[]>(() => DataService.getClasses());
+  const [students, setStudents] = useState(() => DataService.getStudents());
   const teachers = DataService.getTeachers();
 
   // Persistent custom majors
@@ -59,6 +60,13 @@ export const ClassesView: React.FC = () => {
       localStorage.setItem('schoolsphere_custom_majors', JSON.stringify(newList));
     } catch (e) {
       console.error(e);
+    }
+  };
+
+  const handleDeleteMajor = (majorToDelete: string) => {
+    if (confirm(`Apakah Anda yakin ingin menghapus jurusan "${majorToDelete}" dari daftar pilihan?`)) {
+      const updated = availableMajors.filter((m) => m !== majorToDelete);
+      saveMajorsList(updated);
     }
   };
 
@@ -117,15 +125,18 @@ export const ClassesView: React.FC = () => {
       ? teachers.find((t) => t.id === formData.homeroomTeacherId)
       : null;
 
+    const classId = editingClass ? editingClass.id : formData.id || 'cls-' + Date.now();
+    const actualStudentCount = students.filter((s) => s.classId === classId).length;
+
     const payload: ClassRoom = {
-      id: editingClass ? editingClass.id : formData.id || 'cls-' + Date.now(),
+      id: classId,
       name: formData.name,
       grade: formData.grade || 'X',
       major: finalMajor,
       academicYear: formData.academicYear || '2024/2025',
       homeroomTeacherId: formData.homeroomTeacherId || '',
       homeroomTeacherName: teacher ? teacher.name : 'Belum Ditentukan',
-      studentCount: editingClass ? editingClass.studentCount : 32,
+      studentCount: actualStudentCount,
       capacity: formData.capacity || 36,
     };
 
@@ -285,14 +296,16 @@ export const ClassesView: React.FC = () => {
                   Roster Peserta Didik:
                 </span>
                 <span className="font-mono font-semibold text-slate-900 dark:text-white">
-                  {cls.studentCount} / {cls.capacity} Siswa
+                  {students.filter((s) => s.classId === cls.id).length} / {cls.capacity} Siswa
                 </span>
               </div>
 
               <div className="w-full bg-slate-100 dark:bg-slate-800 h-1.5 rounded-full overflow-hidden">
                 <div
                   className="bg-indigo-600 h-full rounded-full transition-all"
-                  style={{ width: `${Math.min(100, (cls.studentCount / cls.capacity) * 100)}%` }}
+                  style={{
+                    width: `${cls.capacity > 0 ? Math.min(100, (students.filter((s) => s.classId === cls.id).length / cls.capacity) * 100) : 0}%`
+                  }}
                 ></div>
               </div>
 
@@ -454,26 +467,51 @@ export const ClassesView: React.FC = () => {
         </div>
       )}
 
-      {/* Modal Quick Add Custom Major */}
+      {/* Modal Kelola & Hapus Peminatan / Jurusan Kustom */}
       {quickMajorModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-          <div className="bg-white dark:bg-slate-900 rounded-xl max-w-sm w-full p-6 border border-slate-200 dark:border-slate-800 shadow-xl space-y-4 text-xs">
+          <div className="bg-white dark:bg-slate-900 rounded-xl max-w-md w-full p-6 border border-slate-200 dark:border-slate-800 shadow-xl space-y-4 text-xs">
             <div className="flex items-center justify-between pb-2 border-b border-slate-100 dark:border-slate-800">
               <h3 className="font-bold text-sm text-slate-900 dark:text-white flex items-center gap-2">
                 <Tag className="w-4 h-4 text-indigo-600" />
-                Tambah Peminatan / Jurusan Kustom
+                Kelola Peminatan & Jurusan
               </h3>
-              <button onClick={() => setQuickMajorModalOpen(false)} className="text-slate-400 hover:text-slate-600">✕</button>
+              <button onClick={() => setQuickMajorModalOpen(false)} className="text-slate-400 hover:text-slate-600 text-sm font-bold">✕</button>
             </div>
 
             <p className="text-slate-500 text-[11px]">
-              Tambahkan nama jurusan baru untuk keperluan kurikulum SMK / SMA / Madrasah jika tidak tersedia pada opsi standar (misalnya: DKV, Tata Boga, Multimedia, Teknik Mesin, Keagamaan, dsb).
+              Daftar jurusan aktif untuk jenjang SMA, SMK, atau Madrasah. Anda dapat menghapus jurusan yang tidak diperlukan atau menambahkan jurusan baru.
             </p>
 
-            <form onSubmit={handleAddQuickMajor} className="space-y-3">
+            {/* List of currently registered majors */}
+            <div>
+              <label className="block text-slate-700 dark:text-slate-300 font-bold mb-2">
+                Daftar Jurusan Aktif ({availableMajors.length})
+              </label>
+              <div className="max-h-48 overflow-y-auto space-y-1.5 p-2 bg-slate-50 dark:bg-slate-800/60 rounded-lg border border-slate-200 dark:border-slate-700">
+                {availableMajors.map((mj) => (
+                  <div
+                    key={mj}
+                    className="flex items-center justify-between px-3 py-1.5 rounded-md bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700/80 text-xs"
+                  >
+                    <span className="font-semibold text-slate-800 dark:text-slate-200">{mj}</span>
+                    <button
+                      type="button"
+                      onClick={() => handleDeleteMajor(mj)}
+                      className="text-rose-600 hover:text-rose-700 hover:bg-rose-50 dark:hover:bg-rose-950/40 p-1 rounded transition-colors"
+                      title={`Hapus jurusan ${mj}`}
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            <form onSubmit={handleAddQuickMajor} className="space-y-3 pt-3 border-t border-slate-100 dark:border-slate-800">
               <div>
-                <label className="block text-slate-700 dark:text-slate-300 font-semibold mb-1">
-                  Nama Jurusan / Peminatan Baru
+                <label className="block text-slate-700 dark:text-slate-300 font-bold mb-1">
+                  Tambah Jurusan / Peminatan Baru
                 </label>
                 <input
                   type="text"
@@ -481,23 +519,23 @@ export const ClassesView: React.FC = () => {
                   placeholder="Contoh: Desain Komunikasi Visual (DKV)"
                   value={newQuickMajor}
                   onChange={(e) => setNewQuickMajor(e.target.value)}
-                  className="w-full px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white font-semibold"
+                  className="w-full px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white font-semibold text-xs"
                 />
               </div>
 
-              <div className="flex justify-end gap-2 pt-2 border-t border-slate-100 dark:border-slate-800">
+              <div className="flex justify-end gap-2 pt-2">
                 <button
                   type="button"
                   onClick={() => setQuickMajorModalOpen(false)}
-                  className="px-3 py-1.5 rounded-lg text-slate-600 hover:bg-slate-100"
+                  className="px-3 py-1.5 rounded-lg text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 font-medium"
                 >
-                  Batal
+                  Tutup
                 </button>
                 <button
                   type="submit"
                   className="px-3.5 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white font-semibold shadow-xs"
                 >
-                  Simpan Jurusan
+                  + Tambah Jurusan
                 </button>
               </div>
             </form>

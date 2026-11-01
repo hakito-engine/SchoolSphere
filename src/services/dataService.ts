@@ -27,6 +27,9 @@ import {
   EffectiveWeekConfig,
   StudentExtracurricular,
   SubjectLearningObjective,
+  DutySchedule,
+  StaffMember,
+  DutyJournal,
 } from '../types';
 import {
   INITIAL_SCHOOL_PROFILE,
@@ -54,6 +57,9 @@ import {
   INITIAL_EFFECTIVE_WEEKS,
   INITIAL_EXTRACURRICULARS,
   INITIAL_LEARNING_OBJECTIVES,
+  INITIAL_STAFF,
+  INITIAL_DUTY_SCHEDULES,
+  INITIAL_DUTY_JOURNALS,
 } from '../data/mockData';
 
 const STORAGE_PREFIX = 'schoolsphere_pro_';
@@ -71,6 +77,9 @@ function getStoredItem<T>(key: string, fallback: T): T {
 function setStoredItem<T>(key: string, value: T): void {
   try {
     localStorage.setItem(STORAGE_PREFIX + key, JSON.stringify(value));
+    if (key !== 'last_cloud_sync' && typeof window !== 'undefined' && DataService && typeof DataService.triggerAutoSyncToServer === 'function') {
+      DataService.triggerAutoSyncToServer();
+    }
   } catch (e) {
     console.error('Error writing localStorage for key: ' + key, e);
   }
@@ -85,17 +94,20 @@ export class DataService {
   static logAction(user: { id: string; name: string; role: Role }, action: string, module: string, details: string) {
     const logs = this.getAuditLogs();
     const newLog: AuditLog = {
-      id: 'log-' + Date.now(),
+      id: 'log-' + Date.now() + '-' + Math.random().toString(36).substring(2, 6),
       timestamp: new Date().toISOString().replace('T', ' ').substring(0, 19),
-      userId: user.id,
-      userName: user.name,
-      role: user.role,
+      userId: user?.id || 'sys',
+      userName: user?.name || 'Sistem Terintegrasi',
+      role: user?.role || 'super_admin',
       action,
       module,
       details,
     };
-    const updated = [newLog, ...logs].slice(0, 100);
+    const updated = [newLog, ...logs].slice(0, 500);
     setStoredItem('audit_logs', updated);
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('schoolsphere_audit_log_updated', { detail: newLog }));
+    }
   }
 
   // --- School Profile ---
@@ -216,23 +228,56 @@ export class DataService {
     };
   }
 
+  // --- Deleted User Identifiers Tracking (Mencegah user yang dihapus muncul kembali) ---
+  static getDeletedUserIdentifiers(): string[] {
+    return getStoredItem<string[]>('deleted_user_identifiers', []);
+  }
+
+  static recordDeletedUserIdentifier(idOrUsername: string): void {
+    if (!idOrUsername) return;
+    const list = this.getDeletedUserIdentifiers();
+    const clean = idOrUsername.toLowerCase().trim();
+    if (!list.includes(clean)) {
+      setStoredItem('deleted_user_identifiers', [...list, clean]);
+    }
+  }
+
+  static unrecordDeletedUserIdentifier(idOrUsername: string): void {
+    if (!idOrUsername) return;
+    const list = this.getDeletedUserIdentifiers();
+    const clean = idOrUsername.toLowerCase().trim();
+    setStoredItem('deleted_user_identifiers', list.filter((item) => item !== clean));
+  }
+
   // --- Users ---
   static getUsers(): User[] {
     const stored = getStoredItem<User[]>('users', INITIAL_USERS);
-    let modified = false;
-    let upgraded = stored.map((u) => {
-      // Migrate legacy '123' or empty passwords to default '123456'
-      if (u.password === '123' || !u.password) {
-        modified = true;
-        return { ...u, password: '123456' };
-      }
-      return u;
-    });
+    const deletedSet = new Set(this.getDeletedUserIdentifiers());
 
-    // Automatically ensure every student has a User account
+    // Filter out any explicitly deleted identifiers
+    let upgraded = stored
+      .filter((u) => !deletedSet.has(u.id.toLowerCase()) && !deletedSet.has(u.username.toLowerCase()))
+      .map((u) => {
+        if (u.password === '123' || !u.password) {
+          return { ...u, password: '123456' };
+        }
+        return u;
+      });
+
+    let modified = false;
+
+    // Automatically ensure every student has a User account (kecuali yang pernah dihapus)
     const students = getStoredItem<Student[]>('students', INITIAL_STUDENTS);
     for (const s of students) {
       const cleanU = s.name.toLowerCase().replace(/[^a-z0-9]/g, '');
+      const isDeleted =
+        deletedSet.has(s.id.toLowerCase()) ||
+        deletedSet.has(`usr-std-${s.id}`.toLowerCase()) ||
+        deletedSet.has(cleanU) ||
+        (s.nisn && deletedSet.has(s.nisn.toLowerCase()));
+
+      if (isDeleted) continue;
+
       const hasAccount = upgraded.some(
         (u) =>
           u.id === `usr-std-${s.id}` ||
@@ -257,10 +302,18 @@ export class DataService {
       }
     }
 
-    // Automatically ensure every teacher has a User account
+    // Automatically ensure every teacher has a User account (kecuali yang pernah dihapus)
     const teachers = getStoredItem<Teacher[]>('teachers', INITIAL_TEACHERS);
     for (const t of teachers) {
       const cleanU = t.name.toLowerCase().replace(/[^a-z0-9]/g, '');
+      const isDeleted =
+        deletedSet.has(t.id.toLowerCase()) ||
+        deletedSet.has(`usr-tch-${t.id}`.toLowerCase()) ||
+        deletedSet.has(cleanU) ||
+        (t.nip && deletedSet.has(t.nip.toLowerCase()));
+
+      if (isDeleted) continue;
+
       const hasAccount = upgraded.some(
         (u) =>
           u.id === `usr-tch-${t.id}` ||
@@ -279,16 +332,59 @@ export class DataService {
           nipOrNisn: t.nip,
           phone: t.phone,
           status: 'aktif',
-            position: t.position || 'Guru Mata Pelajaran',
+          position: t.position || 'Guru Mata Pelajaran',
         });
         modified = true;
       }
     }
 
-    // Automatically ensure every parent (Orang Tua) has a User account
+    // Automatically ensure every staff member (Tendik) has a User account (kecuali yang pernah dihapus)
+    const staffMembers = getStoredItem<StaffMember[]>('staff_members', INITIAL_STAFF);
+    for (const st of staffMembers) {
+      const cleanU = st.name.toLowerCase().replace(/[^a-z0-9]/g, '');
+      const isDeleted =
+        deletedSet.has(st.id.toLowerCase()) ||
+        deletedSet.has(`usr-staff-${st.id}`.toLowerCase()) ||
+        deletedSet.has(cleanU) ||
+        (st.nip && deletedSet.has(st.nip.toLowerCase()));
+
+      if (isDeleted) continue;
+
+      const hasAccount = upgraded.some(
+        (u) =>
+          u.id === `usr-staff-${st.id}` ||
+          u.id === st.id ||
+          (st.nip && u.nipOrNisn === st.nip) ||
+          (u.username === cleanU && u.role === 'tendik')
+      );
+      if (!hasAccount) {
+        upgraded.push({
+          id: `usr-staff-${st.id}`,
+          name: st.name,
+          email: st.email || `${cleanU}@tendik.smanusantara.sch.id`,
+          username: cleanU,
+          password: '123456',
+          role: 'tendik',
+          nipOrNisn: st.nip,
+          phone: st.phone,
+          status: 'aktif',
+          position: st.position,
+        });
+        modified = true;
+      }
+    }
+
+    // Automatically ensure every parent (Orang Tua) has a User account (kecuali yang pernah dihapus)
     for (const s of students) {
       if (s.parentName && s.parentName.trim()) {
         const cleanParentU = s.parentName.toLowerCase().replace(/[^a-z0-9]/g, '');
+        const isDeleted =
+          deletedSet.has(`usr-ortu-${s.parentId}`.toLowerCase()) ||
+          deletedSet.has(`usr-ortu-${cleanParentU}`.toLowerCase()) ||
+          deletedSet.has(cleanParentU);
+
+        if (isDeleted) continue;
+
         const parentUser = upgraded.find(
           (u) =>
             u.id === `usr-ortu-${s.parentId}` ||
@@ -309,7 +405,6 @@ export class DataService {
           });
           modified = true;
         } else {
-          // Ensure this student is in their childrenIds
           if (!parentUser.childrenIds) {
             parentUser.childrenIds = [s.id];
             modified = true;
@@ -321,7 +416,7 @@ export class DataService {
       }
     }
 
-    if (modified) {
+    if (modified || upgraded.length !== stored.length) {
       setStoredItem('users', upgraded);
     }
     return upgraded;
@@ -333,6 +428,11 @@ export class DataService {
 
   static saveUser(user: User, currentUser: { id: string; name: string; role: Role }): User {
     const users = this.getUsers();
+    // Unrecord from deleted identifiers if re-adding
+    this.unrecordDeletedUserIdentifier(user.id);
+    if (user.username) this.unrecordDeletedUserIdentifier(user.username);
+    if (user.nipOrNisn) this.unrecordDeletedUserIdentifier(user.nipOrNisn);
+
     const index = users.findIndex((u) => u.id === user.id);
     let updated: User[];
     if (index >= 0) {
@@ -344,6 +444,9 @@ export class DataService {
       this.logAction(currentUser, 'ADD_USER', 'Manajemen Pengguna', `Menambahkan akun pengguna baru: ${user.name}`);
     }
     setStoredItem('users', updated);
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('schoolsphere_user_updated', { detail: { action: 'save', user } }));
+    }
     return user;
   }
 
@@ -458,12 +561,19 @@ export class DataService {
     }
     const updated = users.filter((u) => u.id !== id);
     setStoredItem('users', updated);
+    this.recordDeletedUserIdentifier(target.id);
+    if (target.username) this.recordDeletedUserIdentifier(target.username);
+    if (target.nipOrNisn) this.recordDeletedUserIdentifier(target.nipOrNisn);
+
     this.logAction(
       currentUser,
       'DELETE_USER',
       'Manajemen Pengguna',
       `Super Admin menghapus pengguna: ${target.name} (${target.username})`
     );
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('schoolsphere_user_updated', { detail: { action: 'delete', id } }));
+    }
     return true;
   }
 
@@ -605,6 +715,37 @@ export class DataService {
     setStoredItem('students', updated);
     if (target) {
       this.logAction(currentUser, 'DELETE_STUDENT', 'Peserta Didik', `Menghapus siswa: ${target.name} (${target.nisn})`);
+
+      // Cascade delete student's user account
+      const users = this.getUsers();
+      const cleanU = target.name.toLowerCase().replace(/[^a-z0-9]/g, '');
+      const userToDelete = users.find(
+        (u) =>
+          u.id === `usr-std-${target.id}` ||
+          u.id === target.id ||
+          (u.nipOrNisn && u.nipOrNisn === target.nisn) ||
+          (u.username === cleanU && u.role === 'siswa')
+      );
+      if (userToDelete) {
+        this.deleteUser(userToDelete.id, currentUser);
+      }
+
+      // Check if parent has no other children, if so delete parent user too
+      const remainingWithParent = updated.filter(
+        (s) => s.parentId === target.parentId || (s.parentName && target.parentName && s.parentName.trim().toLowerCase() === target.parentName.trim().toLowerCase())
+      );
+      if (remainingWithParent.length === 0) {
+        const cleanParentU = (target.parentName || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+        const parentUser = users.find(
+          (u) =>
+            u.id === `usr-ortu-${target.parentId}` ||
+            u.id === `usr-ortu-${cleanParentU}` ||
+            (u.username === cleanParentU && u.role === 'orang_tua')
+        );
+        if (parentUser) {
+          this.deleteUser(parentUser.id, currentUser);
+        }
+      }
     }
   }
 
@@ -734,6 +875,21 @@ export class DataService {
     setStoredItem('teachers', updated);
     if (target) {
       this.logAction(currentUser, 'DELETE_TEACHER', 'Tenaga Pendidik', `Menghapus guru: ${target.name} (NIP: ${target.nip})`);
+
+      // Cascade delete teacher's user account
+      const users = this.getUsers();
+      const cleanU = target.name.toLowerCase().replace(/[^a-z0-9]/g, '');
+      const userToDelete = users.find(
+        (u) =>
+          u.id === target.id ||
+          u.id === `usr-tch-${target.id}` ||
+          u.id === `usr-${target.id}` ||
+          (target.nip && u.nipOrNisn === target.nip) ||
+          (u.username === cleanU && ['guru', 'wali_kelas', 'guru_bk', 'wakasek_kurikulum'].includes(u.role))
+      );
+      if (userToDelete) {
+        this.deleteUser(userToDelete.id, currentUser);
+      }
     }
   }
 
@@ -1589,6 +1745,7 @@ export class DataService {
     port: number;
     database: string;
     username: string;
+    password?: string;
     ssl: boolean;
     connected: boolean;
     syncIntervalMinutes: number;
@@ -1597,8 +1754,9 @@ export class DataService {
     return getStoredItem('mysql_config', {
       host: 'localhost',
       port: 3306,
-      database: 'schoolsphere_db',
-      username: 'school_admin',
+      database: 'sispam_db',
+      username: 'sispam_admin',
+      password: '',
       ssl: false,
       connected: true,
       syncIntervalMinutes: 15,
@@ -1941,6 +2099,9 @@ export class DataService {
       scheduleBlocks: this.getScheduleBlocks(),
       lessonPeriodConfig: this.getLessonPeriodConfig(),
       effectiveWeeks: this.getEffectiveWeeks(),
+      staff: this.getStaff(),
+      dutySchedules: this.getDutySchedules(),
+      dutyJournals: this.getDutyJournals(),
       counseling: this.getCounselingRecords(),
       announcements: this.getAnnouncements(),
       notifications: this.getNotifications(),
@@ -1958,6 +2119,9 @@ export class DataService {
       if (parsed.schoolProfile) setStoredItem('school_profile', parsed.schoolProfile);
       if (parsed.academicYears) setStoredItem('academic_years', parsed.academicYears);
       if (parsed.effectiveWeeks) setStoredItem('effective_weeks', parsed.effectiveWeeks);
+      if (parsed.staff) setStoredItem('staff_members', parsed.staff);
+      if (parsed.dutySchedules) setStoredItem('duty_schedules', parsed.dutySchedules);
+      if (parsed.dutyJournals) setStoredItem('duty_journals', parsed.dutyJournals);
       if (parsed.users) setStoredItem('users', parsed.users);
       if (parsed.students) setStoredItem('students', parsed.students);
       if (parsed.teachers) setStoredItem('teachers', parsed.teachers);
@@ -2089,6 +2253,258 @@ export class DataService {
     setStoredItem('learning_objectives', updated);
     if (target) {
       this.logAction(currentUser, 'DELETE_CP_ATP', 'Kurikulum Merdeka', `Menghapus Capaian Pembelajaran/ATP (${target.tpCode}) mapel ${target.subjectName}`);
+    }
+  }
+
+  // --- Modul Piket & Tenaga Kependidikan (Tendik) ---
+  static getStaff(): StaffMember[] {
+    return getStoredItem<StaffMember[]>('staff_members', INITIAL_STAFF);
+  }
+
+  static saveStaff(member: StaffMember, currentUser: { id: string; name: string; role: Role }): StaffMember {
+    const list = this.getStaff();
+    const idx = list.findIndex((x) => x.id === member.id);
+    let updated: StaffMember[];
+    if (idx >= 0) {
+      updated = [...list];
+      updated[idx] = member;
+      this.logAction(currentUser, 'UPDATE_STAFF', 'Kepegawaian / Tendik', `Memperbarui data tendik: ${member.name} (${member.position})`);
+    } else {
+      updated = [member, ...list];
+      this.logAction(currentUser, 'ADD_STAFF', 'Kepegawaian / Tendik', `Menambahkan tendik baru: ${member.name} (${member.position})`);
+    }
+    setStoredItem('staff_members', updated);
+
+    // Auto-create / update user account with role 'tendik'
+    const cleanU = member.name.toLowerCase().replace(/[^a-z0-9]/g, '');
+    const users = this.getUsers();
+    const userIdx = users.findIndex(
+      (u) =>
+        u.id === `usr-staff-${member.id}` ||
+        u.id === member.id ||
+        (member.nip && u.nipOrNisn === member.nip) ||
+        (u.username === cleanU && u.role === 'tendik')
+    );
+    if (userIdx >= 0) {
+      users[userIdx].name = member.name;
+      users[userIdx].nipOrNisn = member.nip || users[userIdx].nipOrNisn;
+      users[userIdx].phone = member.phone || users[userIdx].phone;
+      users[userIdx].position = member.position;
+      setStoredItem('users', users);
+    } else {
+      const newUser: User = {
+        id: `usr-staff-${member.id}`,
+        name: member.name,
+        email: member.email || `${cleanU}@tendik.smanusantara.sch.id`,
+        username: cleanU,
+        password: '123456',
+        role: 'tendik',
+        nipOrNisn: member.nip,
+        phone: member.phone,
+        status: 'aktif',
+        position: member.position,
+      };
+      this.unrecordDeletedUserIdentifier(newUser.id);
+      this.unrecordDeletedUserIdentifier(newUser.username);
+      setStoredItem('users', [newUser, ...users]);
+    }
+
+    return member;
+  }
+
+  static deleteStaff(id: string, currentUser: { id: string; name: string; role: Role }): void {
+    const list = this.getStaff();
+    const target = list.find((x) => x.id === id);
+    const updated = list.filter((x) => x.id !== id);
+    setStoredItem('staff_members', updated);
+    if (target) {
+      this.logAction(currentUser, 'DELETE_STAFF', 'Kepegawaian / Tendik', `Menghapus data pegawai: ${target.name}`);
+
+      // Cascade delete staff's user account
+      const users = this.getUsers();
+      const cleanU = target.name.toLowerCase().replace(/[^a-z0-9]/g, '');
+      const userToDelete = users.find(
+        (u) =>
+          u.id === target.id ||
+          u.id === `usr-staff-${target.id}` ||
+          (target.nip && u.nipOrNisn === target.nip) ||
+          (u.username === cleanU && u.role === 'tendik')
+      );
+      if (userToDelete) {
+        this.deleteUser(userToDelete.id, currentUser);
+      }
+    }
+  }
+
+  // Jadwal Piket Mingguan
+  static getDutySchedules(): DutySchedule[] {
+    return getStoredItem<DutySchedule[]>('duty_schedules', INITIAL_DUTY_SCHEDULES);
+  }
+
+  static saveDutySchedule(schedule: DutySchedule, currentUser: { id: string; name: string; role: Role }): DutySchedule {
+    const list = this.getDutySchedules();
+    const idx = list.findIndex((x) => x.id === schedule.id || (x.day === schedule.day && x.academicYear === schedule.academicYear));
+    let updated: DutySchedule[];
+    if (idx >= 0) {
+      updated = [...list];
+      updated[idx] = schedule;
+    } else {
+      updated = [...list, schedule];
+    }
+    setStoredItem('duty_schedules', updated);
+    this.logAction(currentUser, 'UPDATE_DUTY_SCHEDULE', 'Piket Sekolah', `Memperbarui jadwal piket hari ${schedule.day}`);
+    return schedule;
+  }
+
+  // Blokir Hari Piket Guru/Tendik (Fitur Blok Bagi)
+  static getDutyBlockedDays(): Record<string, string[]> {
+    return getStoredItem<Record<string, string[]>>('duty_teacher_blocked_days', {});
+  }
+
+  static saveDutyBlockedDays(
+    blockedDays: Record<string, string[]>,
+    currentUser: { id: string; name: string; role: Role }
+  ): Record<string, string[]> {
+    setStoredItem('duty_teacher_blocked_days', blockedDays);
+    this.logAction(
+      currentUser,
+      'UPDATE_DUTY_BLOCKED_DAYS',
+      'Piket Sekolah',
+      'Memperbarui konfigurasi blokir hari piket bagi guru dan tendik.'
+    );
+    return blockedDays;
+  }
+
+
+  // Jurnal Piket Harian
+  static getDutyJournals(): DutyJournal[] {
+    return getStoredItem<DutyJournal[]>('duty_journals', INITIAL_DUTY_JOURNALS);
+  }
+
+  static getDutyJournalById(id: string): DutyJournal | undefined {
+    return this.getDutyJournals().find((j) => j.id === id);
+  }
+
+  static saveDutyJournal(journal: DutyJournal, currentUser: { id: string; name: string; role: Role }): DutyJournal {
+    const list = this.getDutyJournals();
+    const idx = list.findIndex((x) => x.id === journal.id);
+    let updated: DutyJournal[];
+    if (idx >= 0) {
+      updated = [...list];
+      updated[idx] = journal;
+      this.logAction(currentUser, 'UPDATE_DUTY_JOURNAL', 'Piket Sekolah', `Memperbarui jurnal piket tanggal ${journal.date} (${journal.day})`);
+    } else {
+      updated = [journal, ...list];
+      this.logAction(currentUser, 'SUBMIT_DUTY_JOURNAL', 'Piket Sekolah', `Mengirimkan jurnal piket baru tanggal ${journal.date} (${journal.day})`);
+    }
+    setStoredItem('duty_journals', updated);
+    return journal;
+  }
+
+  static deleteDutyJournal(id: string, currentUser: { id: string; name: string; role: Role }): void {
+    const list = this.getDutyJournals();
+    const target = list.find((x) => x.id === id);
+    const updated = list.filter((x) => x.id !== id);
+    setStoredItem('duty_journals', updated);
+    if (target) {
+      this.logAction(currentUser, 'DELETE_DUTY_JOURNAL', 'Piket Sekolah', `Menghapus arsip jurnal piket tanggal ${target.date}`);
+    }
+  }
+
+  // --- Real-time Hosting Server Cloud Sync (sispam.hakito.my.id) ---
+  private static syncDebounceTimer: any = null;
+
+  static triggerAutoSyncToServer(): void {
+    if (typeof window === 'undefined') return;
+    if (this.syncDebounceTimer) {
+      clearTimeout(this.syncDebounceTimer);
+    }
+    this.syncDebounceTimer = setTimeout(() => {
+      this.pushToServer().catch(() => {});
+    }, 2000); // 2 second debounce
+  }
+
+  static async checkServerStatus(): Promise<{
+    online: boolean;
+    server?: string;
+    hasDatabase?: boolean;
+    lastSyncedAt?: string;
+    message: string;
+  }> {
+    try {
+      const res = await fetch('./api.php?action=status', { cache: 'no-cache' });
+      if (!res.ok) {
+        return { online: false, message: 'Server hosting belum mengaktifkan api.php' };
+      }
+      const data = await res.json();
+      return {
+        online: data.status === 'online',
+        server: data.server || 'sispam.hakito.my.id',
+        hasDatabase: !!data.has_database,
+        lastSyncedAt: data.last_synced_at,
+        message: data.message || 'Server online dan terhubung.',
+      };
+    } catch {
+      return {
+        online: false,
+        message: 'Tidak dapat menjangkau api.php pada server hosting.',
+      };
+    }
+  }
+
+  static async pullFromServer(): Promise<boolean> {
+    try {
+      const res = await fetch('./api.php?action=pull', { cache: 'no-cache' });
+      if (!res.ok) return false;
+      const json = await res.json();
+      if (json.status === 'success' && json.data) {
+        const jsonStr = JSON.stringify(json.data);
+        const imported = this.importDatabaseJSON(jsonStr, {
+          id: 'server-sync',
+          name: 'Server Sync sispam.hakito.my.id',
+          role: 'super_admin',
+        });
+        if (imported) {
+          localStorage.setItem(STORAGE_PREFIX + 'last_cloud_sync', new Date().toISOString());
+          window.dispatchEvent(new CustomEvent('schoolsphere_cloud_synced', { detail: { action: 'pull', time: new Date() } }));
+          return true;
+        }
+      } else if (json.status === 'empty') {
+        // Jika database di server masih kosong, otomatis unggah data awal dari browser ini
+        await this.pushToServer();
+        return true;
+      }
+      return false;
+    } catch (e) {
+      console.warn('Gagal pull data dari server hosting:', e);
+      return false;
+    }
+  }
+
+  static async pushToServer(): Promise<boolean> {
+    try {
+      const rawData = JSON.parse(this.exportDatabaseJSON());
+      const res = await fetch('./api.php', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          action: 'push',
+          data: rawData,
+        }),
+      });
+      if (!res.ok) return false;
+      const json = await res.json();
+      if (json.status === 'success') {
+        localStorage.setItem(STORAGE_PREFIX + 'last_cloud_sync', new Date().toISOString());
+        window.dispatchEvent(new CustomEvent('schoolsphere_cloud_synced', { detail: { action: 'push', time: new Date() } }));
+        return true;
+      }
+      return false;
+    } catch (e) {
+      console.warn('Gagal push data ke server hosting:', e);
+      return false;
     }
   }
 

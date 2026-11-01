@@ -53,6 +53,7 @@ export const formatRoleText = (role: string): string => {
     operator: 'Operator Sekolah',
     siswa: 'Peserta Didik',
     orang_tua: 'Orang Tua / Wali',
+    tendik: 'Tenaga Kependidikan (Tendik)',
   };
 
   if (roleMap[role]) return roleMap[role];
@@ -62,3 +63,53 @@ export const formatRoleText = (role: string): string => {
     .map((word) => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
     .join(' ');
 };
+
+/**
+ * Standard Indonesian Date Formatter
+ * Formats dates strictly as "dd MMMM yyyy" (e.g. 01 November 2026).
+ * Supports YYYY-MM-DD, DD-MM-YYYY, DD/MM/YYYY, ISO strings, and Date objects.
+ */
+export const formatDateIndonesian = (input?: string | Date | null): string => {
+  if (!input) return '-';
+  let d: Date;
+  if (typeof input === 'string') {
+    const trimmed = input.trim();
+    if (!trimmed) return '-';
+    if (trimmed.includes('T')) {
+      d = new Date(trimmed);
+    } else if (trimmed.includes('-')) {
+      const parts = trimmed.split('-');
+      if (parts[0].length === 4) {
+        // YYYY-MM-DD
+        d = new Date(parseInt(parts[0], 10), parseInt(parts[1], 10) - 1, parseInt(parts[2], 10));
+      } else {
+        // DD-MM-YYYY
+        d = new Date(parseInt(parts[2], 10), parseInt(parts[1], 10) - 1, parseInt(parts[0], 10));
+      }
+    } else if (trimmed.includes('/')) {
+      const parts = trimmed.split('/');
+      if (parts[2]?.length === 4) {
+        // DD/MM/YYYY
+        d = new Date(parseInt(parts[2], 10), parseInt(parts[1], 10) - 1, parseInt(parts[0], 10));
+      } else {
+        d = new Date(trimmed);
+      }
+    } else {
+      d = new Date(trimmed);
+    }
+  } else {
+    d = input;
+  }
+
+  if (isNaN(d.getTime())) return String(input);
+
+  const day = String(d.getDate()).padStart(2, '0');
+  const months = [
+    'Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni',
+    'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember'
+  ];
+  const month = months[d.getMonth()];
+  const year = d.getFullYear();
+  return `${day} ${month} ${year}`;
+};
+

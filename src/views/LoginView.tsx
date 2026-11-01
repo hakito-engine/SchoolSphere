@@ -13,12 +13,23 @@ import {
   HelpCircle,
   MessageCircle,
   ShieldCheck,
+  QrCode,
+  Scan,
 } from 'lucide-react';
+import { StudentVerificationView } from './StudentVerificationView';
 
 export const LoginView: React.FC = () => {
   const { login } = useAuth();
   const profile = DataService.getSchoolProfile();
 
+  // Check if URL has ?verify= or #/verify/
+  const hasUrlVerify = typeof window !== 'undefined' && (
+    window.location.search.includes('verify=') ||
+    window.location.hash.includes('/verify/') ||
+    window.location.pathname.startsWith('/verify/')
+  );
+
+  const [isVerifyModalOpen, setIsVerifyModalOpen] = useState(hasUrlVerify);
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
@@ -85,6 +96,10 @@ export const LoginView: React.FC = () => {
       // Ignored if window.open is restricted in iframe
     }
   };
+
+  if (isVerifyModalOpen) {
+    return <StudentVerificationView onBack={() => setIsVerifyModalOpen(false)} />;
+  }
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-indigo-50/50 via-slate-50 to-slate-100 dark:from-slate-950 dark:via-slate-900 dark:to-slate-950 flex flex-col justify-center py-12 sm:px-6 lg:px-8 transition-colors">
@@ -205,6 +220,18 @@ export const LoginView: React.FC = () => {
               <span>{loading ? 'Memverifikasi Akun...' : 'Masuk ke Portal Sekolah'}</span>
             </button>
           </form>
+
+          {/* Link Verifikasi Digital Kartu Pelajar (Request 1) */}
+          <div className="pt-3">
+            <button
+              type="button"
+              onClick={() => setIsVerifyModalOpen(true)}
+              className="w-full flex items-center justify-center gap-2 py-2.5 px-4 rounded-xl border border-indigo-200 dark:border-indigo-800 bg-indigo-50/70 hover:bg-indigo-100/90 dark:bg-indigo-950/40 dark:hover:bg-indigo-900/50 text-indigo-700 dark:text-indigo-300 text-xs font-bold transition-all cursor-pointer shadow-2xs"
+            >
+              <QrCode className="w-4 h-4 text-indigo-600 dark:text-indigo-400" />
+              <span>Verifikasi Kartu Pelajar (Scan Barcode & Cek NISN)</span>
+            </button>
+          </div>
 
           {/* Security & Access Info */}
           <div className="pt-4 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between text-[11px] text-slate-500">

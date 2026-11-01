@@ -7,6 +7,7 @@ export type Role =
   | 'guru_bk'
   | 'siswa'
   | 'orang_tua'
+  | 'tendik'
   | 'operator'; // compatibility alias for wakasek_kurikulum
 
 export interface User {
@@ -461,4 +462,146 @@ export interface SubjectLearningObjective {
   teacherId: string;
   teacherName: string;
 }
+
+// ==========================================
+// TIPE DATA MODUL PIKET & JURNAL PIKET HARIAN
+// ==========================================
+
+export interface DutyScheduleOfficer {
+  teacherId: string;
+  teacherName: string;
+  role: string;
+  phone?: string;
+  category?: 'guru' | 'tendik';
+}
+
+export interface DutySchedule {
+  id: string;
+  day: 'Senin' | 'Selasa' | 'Rabu' | 'Kamis' | 'Jumat' | 'Sabtu';
+  academicYear: string;
+  semester: 'Ganjil' | 'Genap';
+  dutyOfficers: DutyScheduleOfficer[];
+  standbyLocation: string;
+  notes?: string;
+  startDate?: string;
+  endDate?: string;
+  dateRangeText?: string;
+}
+
+
+export interface StaffMember {
+  id: string;
+  nip?: string;
+  name: string;
+  position: string; // Jabatan Pegawai
+  phone?: string;
+  email?: string;
+  employmentStatus?: 'PNS' | 'PPPK' | 'Honorer' | 'Tetap Yayasan' | string;
+  workHours?: string;
+  roleCategory?: string;
+  status: 'aktif' | 'nonaktif';
+}
+
+export interface DutyTeacherScheduleSlot {
+  classId: string;
+  className: string;
+  subjectName: string;
+  period: string; // Jam ke-1, Jam ke-2 dst
+  room?: string;
+  isVerified: boolean; // Pengecekan per jam
+  substituteTeacherId?: string; // Guru infal/pengganti
+  substituteTeacherName?: string;
+  notes?: string; // Tugas/materi
+}
+
+export interface DutyTeacherRecord {
+  id: string;
+  teacherId: string;
+  teacherName: string;
+  status: 'hadir' | 'tidak_hadir';
+  absenceReason?: 'Tanpa Keterangan' | 'Izin' | 'Sakit' | 'Terlambat' | 'Dinas Luar';
+  absenceNotes?: string;
+  slots: DutyTeacherScheduleSlot[];
+}
+
+export interface DutyStaffRecord {
+  id: string;
+  staffId: string;
+  staffName: string;
+  position: string;
+  status: 'hadir' | 'tidak_hadir';
+  checkInTime?: string; // Jam Datang
+  checkOutTime?: string; // Jam Pulang
+  absenceReason?: 'Tanpa Keterangan' | 'Izin' | 'Sakit' | 'Terlambat' | 'Cuti' | 'Dinas Luar';
+  absenceNotes?: string; // Alasan Tidak Hadir
+}
+
+export interface DutyGuestRecord {
+  id: string;
+  fullName: string;
+  address: string;
+  officeAddress?: string; // Alamat Kantor (tidak wajib)
+  phone?: string;
+  time: string; // Jam kedatangan
+  purpose: string; // Tujuan Kunjungan
+  personToMeet: string; // Menemui Siapa
+  followUp: string; // Tindak Lanjut Penyelesaian
+}
+
+export interface DutyStudentAbsenceItem {
+  studentId: string;
+  studentName: string;
+  status: 'sakit' | 'izin' | 'alpa' | 'terlambat' | 'cepat_pulang';
+  notes?: string;
+}
+
+export interface DutyStudentClassSummary {
+  classId: string;
+  className: string;
+  totalPresent: number; // Jumlah siswa hadir
+  absentStudents: DutyStudentAbsenceItem[]; // Daftar nama siswa tidak hadir
+}
+
+export interface DutyIncidentRecord {
+  id: string;
+  time: string; // Pukul
+  description: string; // Uraian Kejadian Penting
+  partiesInvolved: string; // Pihak Terlibat
+  involvesStudents: boolean; // Centang "Melibatkan Siswa"
+  involvedStudentIds: string[]; // Siswa-siswa bermasalah berdasarkan filter kelas
+  involvedStudentNames: string[];
+  followUp: string; // Tindak Lanjut Penyelesaian
+  referredToBK?: boolean; // Rekomendasi Rujuk ke Guru BK
+}
+
+export interface DutyJournal {
+  id: string;
+  date: string; // YYYY-MM-DD
+  day: string; // e.g. 'Senin'
+  academicYear: string;
+  semester: 'Ganjil' | 'Genap';
+  officer1Id: string;
+  officer1Name: string;
+  officer1Nip?: string;
+  officer2Id: string;
+  officer2Name: string;
+  officer2Nip?: string;
+  officer3Id: string;
+  officer3Name: string;
+  officer3Nip?: string;
+  headmasterName: string;
+  headmasterNip: string;
+  teachersPresent: DutyTeacherRecord[];
+  teachersAbsent: DutyTeacherRecord[];
+  staffPresent: DutyStaffRecord[];
+  staffAbsent: DutyStaffRecord[];
+  guests: DutyGuestRecord[];
+  studentAttendance: DutyStudentClassSummary[];
+  incidents: DutyIncidentRecord[];
+  generalNotes?: string;
+  createdAt: string;
+  createdBy: string;
+  status: 'draft' | 'submitted' | 'published';
+}
+
 

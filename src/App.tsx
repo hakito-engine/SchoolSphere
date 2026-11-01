@@ -4,6 +4,7 @@ import { Navbar } from './components/layout/Navbar';
 import { Sidebar } from './components/layout/Sidebar';
 import { GlobalSearchModal } from './components/common/GlobalSearchModal';
 import { ErrorBoundary } from './components/common/ErrorBoundary';
+import { DataService } from './services/dataService';
 
 // Views
 import { DashboardView } from './views/DashboardView';
@@ -23,12 +24,22 @@ import { AnalyticsView } from './views/AnalyticsView';
 import { AnnouncementsView } from './views/AnnouncementsView';
 import { SchoolSettingsView } from './views/SchoolSettingsView';
 import { HomeroomReportView } from './views/HomeroomReportView';
+import { DutyPiketView } from './views/DutyPiketView';
+import { TendikView } from './views/TendikView';
+import { SystemManagementView } from './views/SystemManagementView';
 import { LoginView } from './views/LoginView';
 
 const AuthenticatedApp: React.FC = () => {
   const { currentUser, canAccess } = useAuth();
 
-  const [activeTab, setActiveTab] = useState('dashboard');
+  const [activeTab, setActiveTabState] = useState(() => {
+    return localStorage.getItem('schoolsphere_active_tab') || 'dashboard';
+  });
+
+  const setActiveTab = (tab: string) => {
+    localStorage.setItem('schoolsphere_active_tab', tab);
+    setActiveTabState(tab);
+  };
   // Default to collapsed so that it auto-expands when hovered by cursor
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [isSearchOpen, setIsSearchOpen] = useState(false);
@@ -65,6 +76,15 @@ const AuthenticatedApp: React.FC = () => {
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, []);
 
+  // Sinkronisasi otomatis data dengan Server Hosting sispam.hakito.my.id
+  useEffect(() => {
+    DataService.pullFromServer().catch(() => {});
+    const interval = setInterval(() => {
+      DataService.pullFromServer().catch(() => {});
+    }, 60000); // Sinkronisasi berkala setiap 60 detik antar perangkat
+    return () => clearInterval(interval);
+  }, []);
+
   // Ensure active tab is accessible by current role
   useEffect(() => {
     const moduleMap: Record<string, string> = {
@@ -77,15 +97,18 @@ const AuthenticatedApp: React.FC = () => {
       users: 'users',
       students: 'students',
       teachers: 'teachers',
+      tendik: 'tendik',
       classes: 'classes',
       subjects: 'subjects',
       counseling: 'counseling',
       parent_portal: 'parent_portal',
       parent_messages: 'parent_messages',
+      piket: 'piket',
       analytics: 'analytics',
       announcements: 'announcements',
       settings: 'settings',
       backup_audit: 'audit',
+      system_management: 'system_management',
     };
 
     const targetModule = moduleMap[activeTab] || 'dashboard';
@@ -98,10 +121,14 @@ const AuthenticatedApp: React.FC = () => {
     switch (activeTab) {
       case 'dashboard':
         return <DashboardView onNavigate={(tab) => setActiveTab(tab)} />;
+      case 'piket':
+        return <DutyPiketView />;
       case 'students':
         return <StudentsView />;
       case 'teachers':
         return <TeachersView />;
+      case 'tendik':
+        return <TendikView />;
       case 'classes':
         return <ClassesView />;
       case 'subjects':
@@ -130,8 +157,10 @@ const AuthenticatedApp: React.FC = () => {
       case 'announcements':
         return <AnnouncementsView />;
       case 'settings':
-      case 'backup_audit':
         return <SchoolSettingsView />;
+      case 'system_management':
+      case 'backup_audit':
+        return <SystemManagementView />;
       default:
         return <DashboardView onNavigate={(tab) => setActiveTab(tab)} />;
     }
