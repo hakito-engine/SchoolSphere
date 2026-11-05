@@ -195,3 +195,20 @@
 ::-webkit-scrollbar-thumb:hover {
   background: rgba(100, 116, 139, 0.7);
 }
+
+/* Format Surat Resmi Kedinasan: Mulai dari Nomor Surat sampai Penandatangan (Times New Roman, Ukuran 12) */
+.official-letter-content,
+.official-letter-content table,
+.official-letter-content tr,
+.official-letter-content td,
+.official-letter-content th,
+.official-letter-content p,
+.official-letter-content span,
+.official-letter-content div,
+.official-letter-content strong {
+  font-family: 'Times New Roman', Times, Georgia, serif !important;
+  font-size: 12pt !important;
+  line-height: 1.5 !important;
+  color: #000000 !important;
+}
+

@@ -1,10 +1,11 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { Navbar } from './components/layout/Navbar';
 import { Sidebar } from './components/layout/Sidebar';
 import { GlobalSearchModal } from './components/common/GlobalSearchModal';
 import { ErrorBoundary } from './components/common/ErrorBoundary';
 import { DataService } from './services/dataService';
+import { getTabFromPath, getPathFromTab, updateDocumentTitle } from './router/routes';
 
 // Views
 import { DashboardView } from './views/DashboardView';
@@ -25,22 +26,66 @@ import { AnnouncementsView } from './views/AnnouncementsView';
 import { SchoolSettingsView } from './views/SchoolSettingsView';
 import { HomeroomReportView } from './views/HomeroomReportView';
 import { DutyPiketView } from './views/DutyPiketView';
+import { PtkAttendanceRecapView } from './views/PtkAttendanceRecapView';
 import { TendikView } from './views/TendikView';
 import { SystemManagementView } from './views/SystemManagementView';
+import { ParentNoticeLetterView } from './views/ParentNoticeLetterView';
+import { DeveloperIdentityView } from './views/DeveloperIdentityView';
 import { LoginView } from './views/LoginView';
 
 const AuthenticatedApp: React.FC = () => {
   const { currentUser, canAccess } = useAuth();
 
-  const [activeTab, setActiveTabState] = useState(() => {
+  // Inisialisasi tab aktif dari URL browser (contoh: /pesertadidik -> 'students')
+  const [activeTab, setActiveTabState] = useState<string>(() => {
+    const fromUrl = getTabFromPath(window.location.pathname);
+    if (fromUrl && fromUrl !== 'login') {
+      return fromUrl;
+    }
     return localStorage.getItem('schoolsphere_active_tab') || 'dashboard';
   });
 
-  const setActiveTab = (tab: string) => {
+  // Navigasi modular: update tab, localStorage, URL browser, dan judul tab dokumen
+  const setActiveTab = useCallback((tab: string, replaceUrl = false) => {
     localStorage.setItem('schoolsphere_active_tab', tab);
     setActiveTabState(tab);
-  };
-  // Default to collapsed so that it auto-expands when hovered by cursor
+
+    const targetPath = getPathFromTab(tab);
+    if (window.location.pathname !== targetPath) {
+      if (replaceUrl) {
+        window.history.replaceState({ tab }, '', targetPath);
+      } else {
+        window.history.pushState({ tab }, '', targetPath);
+      }
+    }
+    updateDocumentTitle(tab);
+  }, []);
+
+  // Sinkronisasi rute URL saat tombol Back / Forward browser ditekan (HTML5 History API)
+  useEffect(() => {
+    const handlePopState = () => {
+      const tabFromPath = getTabFromPath(window.location.pathname);
+      if (tabFromPath && tabFromPath !== 'login') {
+        setActiveTabState(tabFromPath);
+        localStorage.setItem('schoolsphere_active_tab', tabFromPath);
+        updateDocumentTitle(tabFromPath);
+      }
+    };
+
+    window.addEventListener('popstate', handlePopState);
+    return () => window.removeEventListener('popstate', handlePopState);
+  }, []);
+
+  // Saat pertama kali masuk: pastikan URL browser sesuai dengan tab aktif
+  useEffect(() => {
+    const currentTarget = getPathFromTab(activeTab);
+    if (window.location.pathname !== currentTarget) {
+      window.history.replaceState({ tab: activeTab }, '', currentTarget);
+    }
+    updateDocumentTitle(activeTab);
+  }, [activeTab]);
+
+  // Sidebar & Search State
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [isSearchOpen, setIsSearchOpen] = useState(false);
 
@@ -76,16 +121,7 @@ const AuthenticatedApp: React.FC = () => {
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, []);
 
-  // Sinkronisasi otomatis data dengan Server Hosting sispam.hakito.my.id
-  useEffect(() => {
-    DataService.pullFromServer().catch(() => {});
-    const interval = setInterval(() => {
-      DataService.pullFromServer().catch(() => {});
-    }, 60000); // Sinkronisasi berkala setiap 60 detik antar perangkat
-    return () => clearInterval(interval);
-  }, []);
-
-  // Ensure active tab is accessible by current role
+  // Pastikan peran pengguna memiliki hak akses ke modul tab aktif
   useEffect(() => {
     const moduleMap: Record<string, string> = {
       dashboard: 'dashboard',
@@ -101,21 +137,24 @@ const AuthenticatedApp: React.FC = () => {
       classes: 'classes',
       subjects: 'subjects',
       counseling: 'counseling',
+      letters: 'letters',
       parent_portal: 'parent_portal',
       parent_messages: 'parent_messages',
       piket: 'piket',
+      rekap_ptk: 'rekap_ptk',
       analytics: 'analytics',
       announcements: 'announcements',
       settings: 'settings',
       backup_audit: 'audit',
       system_management: 'system_management',
+      developer_identity: 'developer_identity',
     };
 
     const targetModule = moduleMap[activeTab] || 'dashboard';
     if (!canAccess(targetModule) && activeTab !== 'dashboard') {
-      setActiveTab('dashboard');
+      setActiveTab('dashboard', true);
     }
-  }, [currentUser.role, activeTab, canAccess]);
+  }, [currentUser.role, activeTab, canAccess, setActiveTab]);
 
   const renderActiveView = () => {
     switch (activeTab) {
@@ -123,6 +162,8 @@ const AuthenticatedApp: React.FC = () => {
         return <DashboardView onNavigate={(tab) => setActiveTab(tab)} />;
       case 'piket':
         return <DutyPiketView />;
+      case 'rekap_ptk':
+        return <PtkAttendanceRecapView />;
       case 'students':
         return <StudentsView />;
       case 'teachers':
@@ -149,6 +190,8 @@ const AuthenticatedApp: React.FC = () => {
         return <UsersView />;
       case 'counseling':
         return <CounselingView />;
+      case 'letters':
+        return <ParentNoticeLetterView />;
       case 'parent_portal':
       case 'parent_messages':
         return <ParentPortalView initialTab={activeTab === 'parent_messages' ? 'pesan' : 'portal'} />;
@@ -161,6 +204,8 @@ const AuthenticatedApp: React.FC = () => {
       case 'system_management':
       case 'backup_audit':
         return <SystemManagementView />;
+      case 'developer_identity':
+        return <DeveloperIdentityView />;
       default:
         return <DashboardView onNavigate={(tab) => setActiveTab(tab)} />;
     }
@@ -193,10 +238,10 @@ const AuthenticatedApp: React.FC = () => {
         {/* Quiet Footer */}
         <footer className="no-print border-t border-slate-200 dark:border-slate-800 py-4 px-6 text-center text-[11px] text-slate-500 flex flex-col sm:flex-row items-center justify-between gap-2">
           <span className="font-medium text-slate-700 dark:text-slate-300">
-            SISPAM by Hakito Engine · Sistem Integrasi Sekolah, Pembelajaran, & Administrasi
+            SISPAM by Hakito Tech · Sistem Integrasi Sekolah, Pembelajaran, & Administrasi
           </span>
           <span className="text-slate-500">
-            Terintegrasi Standar Kurikulum Merdeka
+            Terintegrasi Standar Kurikulum Merdeka & Cloud Database
           </span>
         </footer>
       </div>
@@ -214,6 +259,43 @@ const AuthenticatedApp: React.FC = () => {
 function MainContent() {
   const { isAuthenticated } = useAuth();
 
+  // Sinkronisasi URL saat status otentikasi berubah
+  useEffect(() => {
+    if (!isAuthenticated) {
+      const currentPath = window.location.pathname;
+      // Jika pengguna belum login tetapi mencoba mengakses path tertentu (misal /pesertadidik),
+      // simpan path tujuan agar dapat diarahkan kembali setelah login berhasil
+      if (currentPath && currentPath !== '/login' && currentPath !== '/') {
+        sessionStorage.setItem('sispam_redirect_target', currentPath);
+      }
+      if (window.location.pathname !== '/login') {
+        window.history.replaceState(null, '', '/login');
+      }
+      updateDocumentTitle('login');
+    } else {
+      // Jika sudah login, cek apakah ada path tujuan redirect sebelumnya
+      const redirectTarget = sessionStorage.getItem('sispam_redirect_target');
+      if (redirectTarget) {
+        sessionStorage.removeItem('sispam_redirect_target');
+        const targetTab = getTabFromPath(redirectTarget);
+        if (targetTab && targetTab !== 'login') {
+          localStorage.setItem('schoolsphere_active_tab', targetTab);
+          window.history.replaceState({ tab: targetTab }, '', redirectTarget);
+          updateDocumentTitle(targetTab);
+          return;
+        }
+      }
+
+      // Jika URL saat ini masih /login, alihkan ke /dashboard
+      if (window.location.pathname === '/login') {
+        const savedTab = localStorage.getItem('schoolsphere_active_tab') || 'dashboard';
+        const targetPath = getPathFromTab(savedTab);
+        window.history.replaceState({ tab: savedTab }, '', targetPath);
+        updateDocumentTitle(savedTab);
+      }
+    }
+  }, [isAuthenticated]);
+
   if (!isAuthenticated) {
     return <LoginView key="login-view" />;
   }
@@ -222,6 +304,15 @@ function MainContent() {
 }
 
 export default function App() {
+  // SINKRONISASI DATABASE REAL-TIME GLOBAL (Berjalan di level tertinggi aplikasi)
+  // Menjaga sinkronisasi antar perangkat, mode privat, dan mendeteksi perubahan dari luar (phpMyAdmin / akun lain)
+  useEffect(() => {
+    const stopSync = DataService.startRealtimeSync(15000);
+    return () => {
+      stopSync();
+    };
+  }, []);
+
   return (
     <ErrorBoundary>
       <AuthProvider>

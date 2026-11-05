@@ -419,9 +419,9 @@ export const HomeroomReportView: React.FC = () => {
 
       obj['Total Nilai'] = row.totalScore;
       obj['Rata-Rata'] = row.averageScore;
-      obj['Sakit'] = row.attendance.sakit;
-      obj['Izin'] = row.attendance.izin;
-      obj['Alpa'] = row.attendance.alpa;
+      obj['Sakit'] = row.attendance?.sakit ?? 0;
+      obj['Izin'] = row.attendance?.izin ?? 0;
+      obj['Alpa'] = row.attendance?.alpa ?? 0;
 
       return obj;
     });
@@ -828,15 +828,15 @@ export const HomeroomReportView: React.FC = () => {
                     <div className="grid grid-cols-3 gap-2 text-center pt-1">
                       <div className="p-2.5 rounded-lg bg-blue-50 dark:bg-blue-950/40 border border-blue-200 dark:border-blue-800">
                         <span className="text-[11px] text-blue-800 dark:text-blue-300 block font-semibold">Sakit</span>
-                        <span className="text-lg font-bold font-mono text-blue-700 dark:text-blue-200">{activeStudentReport.attendance.sakit} Hari</span>
+                        <span className="text-lg font-bold font-mono text-blue-700 dark:text-blue-200">{activeStudentReport?.attendance?.sakit ?? 0} Hari</span>
                       </div>
                       <div className="p-2.5 rounded-lg bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800">
                         <span className="text-[11px] text-amber-800 dark:text-amber-300 block font-semibold">Izin</span>
-                        <span className="text-lg font-bold font-mono text-amber-700 dark:text-amber-200">{activeStudentReport.attendance.izin} Hari</span>
+                        <span className="text-lg font-bold font-mono text-amber-700 dark:text-amber-200">{activeStudentReport?.attendance?.izin ?? 0} Hari</span>
                       </div>
                       <div className="p-2.5 rounded-lg bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-800">
                         <span className="text-[11px] text-rose-800 dark:text-rose-300 block font-semibold">Tanpa Keterangan</span>
-                        <span className="text-lg font-bold font-mono text-rose-700 dark:text-rose-200">{activeStudentReport.attendance.alpa} Hari</span>
+                        <span className="text-lg font-bold font-mono text-rose-700 dark:text-rose-200">{activeStudentReport?.attendance?.alpa ?? 0} Hari</span>
                       </div>
                     </div>
                   </div>
@@ -976,9 +976,9 @@ export const HomeroomReportView: React.FC = () => {
                       <td className="py-2 px-3 text-center font-mono font-bold text-indigo-600 dark:text-indigo-400 bg-indigo-50/30 dark:bg-indigo-950/20">
                         {row.averageScore}
                       </td>
-                      <td className="py-2 px-2 text-center font-mono text-slate-500">{row.attendance.sakit}</td>
-                      <td className="py-2 px-2 text-center font-mono text-slate-500">{row.attendance.izin}</td>
-                      <td className="py-2 px-2 text-center font-mono font-bold text-rose-600">{row.attendance.alpa}</td>
+                      <td className="py-2 px-2 text-center font-mono text-slate-500">{row.attendance?.sakit ?? 0}</td>
+                      <td className="py-2 px-2 text-center font-mono text-slate-500">{row.attendance?.izin ?? 0}</td>
+                      <td className="py-2 px-2 text-center font-mono font-bold text-rose-600">{row.attendance?.alpa ?? 0}</td>
                     </tr>
                   ))}
                 </tbody>
@@ -1126,15 +1126,15 @@ export const HomeroomReportView: React.FC = () => {
                   <tbody>
                     <tr>
                       <td className="border border-black py-1 px-2">Sakit</td>
-                      <td className="border border-black py-1 px-2 text-center font-bold w-20">{activeStudentReport.attendance.sakit} Hari</td>
+                      <td className="border border-black py-1 px-2 text-center font-bold w-20">{activeStudentReport?.attendance?.sakit ?? 0} Hari</td>
                     </tr>
                     <tr>
                       <td className="border border-black py-1 px-2">Izin</td>
-                      <td className="border border-black py-1 px-2 text-center font-bold w-20">{activeStudentReport.attendance.izin} Hari</td>
+                      <td className="border border-black py-1 px-2 text-center font-bold w-20">{activeStudentReport?.attendance?.izin ?? 0} Hari</td>
                     </tr>
                     <tr>
                       <td className="border border-black py-1 px-2">Tanpa Keterangan (Alpa)</td>
-                      <td className="border border-black py-1 px-2 text-center font-bold w-20">{activeStudentReport.attendance.alpa} Hari</td>
+                      <td className="border border-black py-1 px-2 text-center font-bold w-20">{activeStudentReport?.attendance?.alpa ?? 0} Hari</td>
                     </tr>
                   </tbody>
                 </table>
@@ -1220,9 +1220,9 @@ export const HomeroomReportView: React.FC = () => {
                   <td className="border border-black py-0.5 px-1 text-center font-mono font-bold">{row.totalScore}</td>
                   <td className="border border-black py-0.5 px-1 text-center font-mono font-bold">{row.averageScore}</td>
                   <td className="border border-black py-0.5 px-1 text-center font-mono font-bold">#{row.rank}</td>
-                  <td className="border border-black py-0.5 px-1 text-center font-mono">{row.attendance.sakit}</td>
-                  <td className="border border-black py-0.5 px-1 text-center font-mono">{row.attendance.izin}</td>
-                  <td className="border border-black py-0.5 px-1 text-center font-mono">{row.attendance.alpa}</td>
+                  <td className="border border-black py-0.5 px-1 text-center font-mono">{row.attendance?.sakit ?? 0}</td>
+                  <td className="border border-black py-0.5 px-1 text-center font-mono">{row.attendance?.izin ?? 0}</td>
+                  <td className="border border-black py-0.5 px-1 text-center font-mono">{row.attendance?.alpa ?? 0}</td>
                 </tr>
               ))}
             </tbody>

@@ -247,7 +247,7 @@ export const SchoolSettingsView: React.FC = () => {
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `schoolsphere_database_dump_${new Date().toISOString().substring(0, 10)}.sql`;
+    a.download = `sispam_database_dump_${new Date().toISOString().substring(0, 10)}.sql`;
     a.click();
     URL.revokeObjectURL(url);
     setMysqlSavedStatus('Berkas skema & data MySQL (.sql) berhasil diunduh. Siap diimpor ke MySQL Server.');
@@ -2150,7 +2150,7 @@ def health():
                   value={mysqlConfig.database}
                   onChange={(e) => setMysqlConfig({ ...mysqlConfig, database: e.target.value })}
                   className="w-full px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white font-mono"
-                  placeholder="schoolsphere_db"
+                  placeholder="sispam_db"
                 />
               </div>
 
@@ -2448,7 +2448,7 @@ def health():
               </div>
               <button
                 type="button"
-                onClick={() => handleCopyCode(`git clone https://github.com/sekolah/schoolsphere-app.git\ncd schoolsphere-app\nnpm install\nnpm run build`, 'build_commands')}
+                onClick={() => handleCopyCode(`git clone https://github.com/sekolah/sispam-app.git\ncd sispam-app\nnpm install\nnpm run build`, 'build_commands')}
                 className="flex items-center gap-1.5 px-2.5 py-1 text-[11px] font-semibold rounded-md border border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-300 transition-colors cursor-pointer"
               >
                 {copiedSnippet === 'build_commands' ? <Check className="w-3.5 h-3.5 text-emerald-600" /> : <Copy className="w-3.5 h-3.5" />}
@@ -2462,8 +2462,8 @@ def health():
 
             <div className="p-4 rounded-xl bg-slate-950 font-mono text-xs text-emerald-400 space-y-2 border border-slate-800 overflow-x-auto">
               <p className="text-slate-400"># 1. Kloning repositori kode atau unggah folder proyek</p>
-              <p className="text-white">git clone https://github.com/sekolah/schoolsphere-app.git</p>
-              <p className="text-white">cd schoolsphere-app</p>
+              <p className="text-white">git clone https://github.com/sekolah/sispam-app.git</p>
+              <p className="text-white">cd sispam-app</p>
               <p className="text-slate-400 pt-1"># 2. Pasang semua pustaka / dependencies</p>
               <p className="text-white">npm install</p>
               <p className="text-slate-400 pt-1"># 3. Uji coba mode pengembangan lokal (Port 3000)</p>
@@ -2473,7 +2473,7 @@ def health():
             </div>
 
             <div className="p-3 bg-emerald-50/70 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800 rounded-lg text-emerald-950 dark:text-emerald-200 text-xs">
-              <strong>Hasil Kompilasi:</strong> Berkas statis web teroptimasi akan otomatis tercipta di dalam folder <strong>`dist/`</strong>. Seluruh berkas di dalam folder ini siap disalin ke direktori publik web server Anda (misal: <code>/var/www/schoolsphere/dist</code> atau <code>public_html/</code>).
+              <strong>Hasil Kompilasi:</strong> Berkas statis web teroptimasi akan otomatis tercipta di dalam folder <strong>`dist/`</strong>. Seluruh berkas di dalam folder ini siap disalin ke direktori publik web server Anda (misal: <code>/var/www/sispam/dist</code> atau <code>public_html/</code>).
             </div>
           </div>
 
@@ -2498,14 +2498,14 @@ def health():
                   <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-green-100 text-green-800 dark:bg-green-950 dark:text-green-300">
                     NGINX (Sangat Disarankan)
                   </span>
-                  <span className="text-[11px] text-slate-500 font-mono">/etc/nginx/sites-available/schoolsphere.conf</span>
+                  <span className="text-[11px] text-slate-500 font-mono">/etc/nginx/sites-available/sispam.conf</span>
                 </div>
                 <button
                   type="button"
                   onClick={() => handleCopyCode(`server {
     listen 80;
     server_name sman1nusantara.sch.id;
-    root /var/www/schoolsphere/dist;
+    root /var/www/sispam/dist;
     index index.html;
 
     gzip on;
@@ -2531,7 +2531,7 @@ def health():
 {`server {
     listen 80;
     server_name sman1nusantara.sch.id;
-    root /var/www/schoolsphere/dist;
+    root /var/www/sispam/dist;
     index index.html;
 
     # Penanganan SPA Rewrite (KUNCI AGAR REFRESH TIDAK 404)

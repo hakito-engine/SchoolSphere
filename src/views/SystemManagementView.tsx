@@ -2,7 +2,6 @@ import React, { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { DataService } from '../services/dataService';
 import { AuditLog, SchoolProfile } from '../types';
-import { DIST_ZIP_BASE64 } from '../data/distZipBase64';
 import { formatActionText, formatRoleText } from '../utils/formatters';
 import {
   Database,
@@ -25,13 +24,15 @@ import {
   KeyRound,
   Sparkles,
   ExternalLink,
+  Code2,
 } from 'lucide-react';
+import { DeveloperIdentityView } from './DeveloperIdentityView';
 
 export const SystemManagementView: React.FC = () => {
   const { currentUser } = useAuth();
   const profile = DataService.getSchoolProfile();
 
-  const [activeTab, setActiveTab] = useState<'audit' | 'backup' | 'hosting' | 'admin_credentials'>('audit');
+  const [activeTab, setActiveTab] = useState<'audit' | 'backup' | 'hosting' | 'admin_credentials' | 'developer_identity'>('audit');
   const [auditLogs, setAuditLogs] = useState<AuditLog[]>(() => DataService.getAuditLogs());
 
   // Real-time audit log event listener (Request 14)
@@ -56,12 +57,26 @@ export const SystemManagementView: React.FC = () => {
   const [syncStatus, setSyncStatus] = useState<{
     online: boolean;
     server?: string;
+    engine?: string;
     hasDatabase?: boolean;
+    tableCounts?: Record<string, number>;
     lastSyncedAt?: string;
     message: string;
   } | null>(null);
   const [isSyncing, setIsSyncing] = useState(false);
   const [syncFeedback, setSyncFeedback] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
+
+  // MySQL cPanel Database config state
+  const [dbHost, setDbHost] = useState('localhost');
+  const [dbName, setDbName] = useState('');
+  const [dbUser, setDbUser] = useState('');
+  const [dbPass, setDbPass] = useState('');
+  const [isSavingDbConfig, setIsSavingDbConfig] = useState(false);
+  const [dbConfigFeedback, setDbConfigFeedback] = useState<{
+    type: 'success' | 'error';
+    message: string;
+    tables?: string[];
+  } | null>(null);
 
   // Download dist.zip state
   const [isDownloadingBundle, setIsDownloadingBundle] = useState(false);
@@ -207,27 +222,75 @@ export const SystemManagementView: React.FC = () => {
     }
   };
 
+  // Test and save MySQL Database Config to cPanel
+  const handleSaveDbConfig = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!dbName.trim() || !dbUser.trim()) {
+      setDbConfigFeedback({
+        type: 'error',
+        message: 'Nama Database dan Nama Pengguna Database cPanel wajib diisi.',
+      });
+      return;
+    }
+
+    setIsSavingDbConfig(true);
+    setDbConfigFeedback(null);
+    try {
+      const res = await DataService.saveDatabaseConfig({
+        host: dbHost.trim() || 'localhost',
+        database: dbName.trim(),
+        username: dbUser.trim(),
+        password: dbPass,
+      });
+
+      if (res.success) {
+        setDbConfigFeedback({
+          type: 'success',
+          message: res.message || 'Koneksi MySQL phpMyAdmin cPanel berhasil dihubungkan!',
+          tables: res.tablesCreated,
+        });
+
+        // Automatically push current local state to populate newly connected MySQL relational tables
+        await DataService.pushToServer();
+
+        // Refresh status
+        const st = await DataService.checkServerStatus();
+        setSyncStatus(st);
+      } else {
+        setDbConfigFeedback({
+          type: 'error',
+          message: res.message || 'Koneksi gagal. Pastikan hak akses pengguna database di cPanel sudah "ALL PRIVILEGES".',
+        });
+      }
+    } catch (err: any) {
+      setDbConfigFeedback({
+        type: 'error',
+        message: err.message || 'Terjadi kesalahan jaringan saat menyimpan konfigurasi database.',
+      });
+    } finally {
+      setIsSavingDbConfig(false);
+    }
+  };
+
   // Download dist.zip
-  const handleDownloadHostingBundle = () => {
+  const handleDownloadHostingBundle = async () => {
     setIsDownloadingBundle(true);
     try {
-      const binaryString = atob(DIST_ZIP_BASE64);
-      const len = binaryString.length;
-      const bytes = new Uint8Array(len);
-      for (let i = 0; i < len; i++) {
-        bytes[i] = binaryString.charCodeAt(i);
+      const res = await fetch('./dist.zip');
+      if (res.ok) {
+        const blob = await res.blob();
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = 'sispam-dist.zip';
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+      } else {
+        window.location.href = './dist.zip';
       }
-      const blob = new Blob([bytes], { type: 'application/zip' });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = 'sispam-dist.zip';
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      URL.revokeObjectURL(url);
-    } catch (e) {
-      console.error(e);
+    } catch {
       window.location.href = './dist.zip';
     } finally {
       setIsDownloadingBundle(false);
@@ -333,6 +396,18 @@ export const SystemManagementView: React.FC = () => {
         >
           <KeyRound className="w-4 h-4" />
           <span>Kredensial Super Admin</span>
+        </button>
+
+        <button
+          onClick={() => setActiveTab('developer_identity')}
+          className={`pb-3 px-4 font-bold flex items-center gap-2 border-b-2 transition-colors cursor-pointer shrink-0 ${
+            activeTab === 'developer_identity'
+              ? 'border-indigo-600 text-indigo-600 dark:text-indigo-400'
+              : 'border-transparent text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'
+          }`}
+        >
+          <Code2 className="w-4 h-4" />
+          <span>Identitas Pengembang</span>
         </button>
       </div>
 
@@ -570,36 +645,78 @@ export const SystemManagementView: React.FC = () => {
         </div>
       )}
 
-      {/* TAB 3: SINKRONISASI HOSTING RUMAHWEB */}
+      {/* TAB 3: SINKRONISASI HOSTING RUMAHWEB & MYSQL PHPMYADMIN */}
       {activeTab === 'hosting' && (
         <div className="space-y-6">
+          {/* Status Header Card */}
           <div className="p-6 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-2xs space-y-4">
-            <div className="flex items-center justify-between pb-3 border-b border-slate-100 dark:border-slate-800">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-slate-100 dark:border-slate-800">
               <div className="flex items-center gap-3">
                 <div className="w-10 h-10 rounded-xl bg-indigo-50 dark:bg-indigo-950 flex items-center justify-center text-indigo-600">
                   <Cloud className="w-5 h-5" />
                 </div>
                 <div>
                   <h3 className="font-bold text-sm text-slate-900 dark:text-white">
-                    Koneksi Sinkronisasi Server Hosting: sispam.hakito.my.id
+                    Integrasi Server & Database MySQL cPanel (sispam.hakito.my.id)
                   </h3>
                   <p className="text-xs text-slate-500">
-                    Aplikasi ini berkomunikasi langsung dengan file <code>api.php</code> di hosting Anda untuk menyinkronkan data antar laptop, tablet, dan smartphone.
+                    Penyimpanan tersentralisasi langsung ke database phpMyAdmin di cPanel hosting Anda.
                   </p>
                 </div>
               </div>
 
-              <div className="flex items-center gap-2">
+              <div className="flex flex-wrap items-center gap-2">
                 <span className={`px-3 py-1 rounded-full text-xs font-bold border flex items-center gap-1.5 ${
                   syncStatus?.online
                     ? 'bg-emerald-50 text-emerald-700 border-emerald-300 dark:bg-emerald-950 dark:text-emerald-300'
                     : 'bg-amber-50 text-amber-700 border-amber-300 dark:bg-amber-950 dark:text-amber-300'
                 }`}>
                   <span className={`w-2 h-2 rounded-full ${syncStatus?.online ? 'bg-emerald-500 animate-pulse' : 'bg-amber-500'}`}></span>
-                  <span>{syncStatus?.online ? 'Terhubung (Online)' : 'Menghubungkan api.php...'}</span>
+                  <span>{syncStatus?.online ? 'api.php Aktif' : 'Menghubungkan api.php...'}</span>
+                </span>
+
+                <span className={`px-3 py-1 rounded-full text-xs font-bold border flex items-center gap-1.5 ${
+                  syncStatus?.engine === 'mysql_relational'
+                    ? 'bg-indigo-50 text-indigo-700 border-indigo-300 dark:bg-indigo-950 dark:text-indigo-300'
+                    : 'bg-slate-100 text-slate-700 border-slate-300 dark:bg-slate-800 dark:text-slate-300'
+                }`}>
+                  <Database className="w-3.5 h-3.5 text-indigo-600" />
+                  <span>
+                    {syncStatus?.engine === 'mysql_relational'
+                      ? 'Database: MySQL phpMyAdmin'
+                      : 'Database: JSON Standalone'}
+                  </span>
                 </span>
               </div>
             </div>
+
+            {/* Live Table Counts Badge if MySQL is active */}
+            {syncStatus?.tableCounts && (
+              <div className="p-3 bg-slate-50 dark:bg-slate-800/60 rounded-xl border border-slate-200 dark:border-slate-700">
+                <div className="text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-2 flex items-center gap-1.5">
+                  <Server className="w-3.5 h-3.5 text-indigo-500" />
+                  <span>Status Baris Tabel di phpMyAdmin cPanel:</span>
+                </div>
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs">
+                  <div className="p-2 bg-white dark:bg-slate-900 rounded-lg border border-slate-200 dark:border-slate-800">
+                    <span className="text-slate-500 text-[10px] block">Tabel users</span>
+                    <strong className="text-slate-900 dark:text-white font-mono text-sm">{syncStatus.tableCounts.users ?? 0}</strong> baris
+                  </div>
+                  <div className="p-2 bg-white dark:bg-slate-900 rounded-lg border border-slate-200 dark:border-slate-800">
+                    <span className="text-slate-500 text-[10px] block">Tabel students</span>
+                    <strong className="text-slate-900 dark:text-white font-mono text-sm">{syncStatus.tableCounts.students ?? 0}</strong> baris
+                  </div>
+                  <div className="p-2 bg-white dark:bg-slate-900 rounded-lg border border-slate-200 dark:border-slate-800">
+                    <span className="text-slate-500 text-[10px] block">Tabel teachers</span>
+                    <strong className="text-slate-900 dark:text-white font-mono text-sm">{syncStatus.tableCounts.teachers ?? 0}</strong> baris
+                  </div>
+                  <div className="p-2 bg-white dark:bg-slate-900 rounded-lg border border-slate-200 dark:border-slate-800">
+                    <span className="text-slate-500 text-[10px] block">Tabel duty_journals</span>
+                    <strong className="text-slate-900 dark:text-white font-mono text-sm">{syncStatus.tableCounts.duty_journals ?? 0}</strong> baris
+                  </div>
+                </div>
+              </div>
+            )}
 
             {syncFeedback && (
               <div className={`p-4 rounded-xl text-xs flex items-center gap-2 ${
@@ -612,43 +729,162 @@ export const SystemManagementView: React.FC = () => {
               </div>
             )}
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-2">
+            {/* Quick Sync Push & Pull Buttons */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-1">
               <div className="p-4 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 space-y-3">
                 <h4 className="font-bold text-xs text-slate-800 dark:text-slate-200 flex items-center gap-1.5">
                   <Upload className="w-4 h-4 text-indigo-600" />
-                  <span>Kirim Data Lokal ke Server Hosting (Push)</span>
+                  <span>Kirim Seluruh Data Lokal ke Database MySQL (Push)</span>
                 </h4>
                 <p className="text-[11px] text-slate-500">
-                  Unggah seluruh data lokal saat ini ke server hosting sispam.hakito.my.id sehingga dapat diakses oleh perangkat lain.
+                  Unggah seluruh data lokal saat ini ke tabel MySQL phpMyAdmin di sispam.hakito.my.id sehingga langsung tampil di phpMyAdmin dan dapat diakses perangkat lain.
                 </p>
                 <button
                   onClick={handlePushToHosting}
                   disabled={isSyncing}
-                  className="w-full py-2 px-3 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white font-semibold text-xs transition-colors cursor-pointer disabled:opacity-50 flex items-center justify-center gap-1.5"
+                  className="w-full py-2 px-3 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white font-semibold text-xs transition-colors cursor-pointer disabled:opacity-50 flex items-center justify-center gap-1.5 shadow-sm"
                 >
                   <Upload className="w-3.5 h-3.5" />
-                  <span>{isSyncing ? 'Menyinkronkan...' : 'Kirim / Push Data ke Hosting Sekarang'}</span>
+                  <span>{isSyncing ? 'Menyinkronkan...' : 'Kirim / Push Data ke MySQL Sekarang'}</span>
                 </button>
               </div>
 
               <div className="p-4 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 space-y-3">
                 <h4 className="font-bold text-xs text-slate-800 dark:text-slate-200 flex items-center gap-1.5">
                   <Download className="w-4 h-4 text-emerald-600" />
-                  <span>Tarik Data Terbaru dari Server Hosting (Pull)</span>
+                  <span>Tarik Data Terbaru dari Database MySQL (Pull)</span>
                 </h4>
                 <p className="text-[11px] text-slate-500">
-                  Ambil data terbaru yang telah diinputkan oleh pengguna lain di server hosting sispam.hakito.my.id ke browser ini.
+                  Ambil data mutakhir dari tabel database server hosting sispam.hakito.my.id ke browser ini tanpa menimpa perubahan lokal yang lebih baru.
                 </p>
                 <button
                   onClick={handlePullFromHosting}
                   disabled={isSyncing}
-                  className="w-full py-2 px-3 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white font-semibold text-xs transition-colors cursor-pointer disabled:opacity-50 flex items-center justify-center gap-1.5"
+                  className="w-full py-2 px-3 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white font-semibold text-xs transition-colors cursor-pointer disabled:opacity-50 flex items-center justify-center gap-1.5 shadow-sm"
                 >
                   <Download className="w-3.5 h-3.5" />
-                  <span>{isSyncing ? 'Menyinkronkan...' : 'Tarik / Pull Data dari Hosting'}</span>
+                  <span>{isSyncing ? 'Menyinkronkan...' : 'Tarik / Pull Data dari MySQL'}</span>
                 </button>
               </div>
             </div>
+          </div>
+
+          {/* Form Konfigurasi Database MySQL cPanel */}
+          <div className="p-6 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-2xs space-y-4">
+            <div className="flex items-center gap-3 pb-3 border-b border-slate-100 dark:border-slate-800">
+              <div className="w-10 h-10 rounded-xl bg-indigo-50 dark:bg-indigo-950 flex items-center justify-center text-indigo-600">
+                <Database className="w-5 h-5" />
+              </div>
+              <div>
+                <h3 className="font-bold text-sm text-slate-900 dark:text-white">
+                  Pengaturan Koneksi Database MySQL cPanel
+                </h3>
+                <p className="text-xs text-slate-500">
+                  Masukkan nama database, username, dan password MySQL dari cPanel Anda untuk menghubungkan phpMyAdmin secara langsung.
+                </p>
+              </div>
+            </div>
+
+            {dbConfigFeedback && (
+              <div className={`p-4 rounded-xl text-xs space-y-2 ${
+                dbConfigFeedback.type === 'success'
+                  ? 'bg-emerald-50 text-emerald-800 border border-emerald-200 dark:bg-emerald-950 dark:text-emerald-200'
+                  : 'bg-rose-50 text-rose-800 border border-rose-200 dark:bg-rose-950 dark:text-rose-200'
+              }`}>
+                <div className="flex items-center gap-2 font-bold">
+                  {dbConfigFeedback.type === 'success' ? <CheckCircle2 className="w-4 h-4 shrink-0" /> : <AlertCircle className="w-4 h-4 shrink-0" />}
+                  <span>{dbConfigFeedback.message}</span>
+                </div>
+                {dbConfigFeedback.tables && dbConfigFeedback.tables.length > 0 && (
+                  <div className="text-[11px] text-emerald-700 dark:text-emerald-300 font-mono">
+                    Tabel relasional aktif: {dbConfigFeedback.tables.join(', ')}
+                  </div>
+                )}
+              </div>
+            )}
+
+            <form onSubmit={handleSaveDbConfig} className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs">
+              <div>
+                <label className="block text-slate-700 dark:text-slate-300 font-semibold mb-1">
+                  Database Host
+                </label>
+                <input
+                  type="text"
+                  required
+                  value={dbHost}
+                  onChange={(e) => setDbHost(e.target.value)}
+                  placeholder="localhost"
+                  className="w-full px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white font-mono"
+                />
+                <span className="text-[10px] text-slate-400">Biasanya tetap "localhost" pada cPanel RumahWeb</span>
+              </div>
+
+              <div>
+                <label className="block text-slate-700 dark:text-slate-300 font-semibold mb-1">
+                  Nama Database cPanel (Database Name)
+                </label>
+                <input
+                  type="text"
+                  required
+                  value={dbName}
+                  onChange={(e) => setDbName(e.target.value)}
+                  placeholder="contoh: u1234567_sispam"
+                  className="w-full px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white font-mono"
+                />
+                <span className="text-[10px] text-slate-400">Sesuai nama database di menu MySQL Databases cPanel</span>
+              </div>
+
+              <div>
+                <label className="block text-slate-700 dark:text-slate-300 font-semibold mb-1">
+                  Nama Pengguna Database (Database User)
+                </label>
+                <input
+                  type="text"
+                  required
+                  value={dbUser}
+                  onChange={(e) => setDbUser(e.target.value)}
+                  placeholder="contoh: u1234567_admin"
+                  className="w-full px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white font-mono"
+                />
+                <span className="text-[10px] text-slate-400">User cPanel yang ditambahkan ke database</span>
+              </div>
+
+              <div>
+                <label className="block text-slate-700 dark:text-slate-300 font-semibold mb-1">
+                  Kata Sandi Database (Database Password)
+                </label>
+                <input
+                  type="password"
+                  value={dbPass}
+                  onChange={(e) => setDbPass(e.target.value)}
+                  placeholder="Ketik password pengguna database..."
+                  className="w-full px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white font-mono"
+                />
+                <span className="text-[10px] text-slate-400">Password user MySQL yang dibuat di cPanel</span>
+              </div>
+
+              <div className="sm:col-span-2 pt-2 flex flex-col sm:flex-row items-center justify-between gap-3">
+                <button
+                  type="submit"
+                  disabled={isSavingDbConfig}
+                  className="w-full sm:w-auto px-6 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs shadow-md transition-colors cursor-pointer disabled:opacity-50 flex items-center justify-center gap-2"
+                >
+                  <Database className="w-4 h-4" />
+                  <span>{isSavingDbConfig ? 'Menghubungkan & Memverifikasi Tabel...' : 'Tes & Simpan Koneksi Database cPanel'}</span>
+                </button>
+
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={handleExportSQL}
+                    className="px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 text-xs font-semibold flex items-center gap-1.5 transition-colors"
+                  >
+                    <Download className="w-3.5 h-3.5" />
+                    <span>Download Script SQL (sispam_database.sql)</span>
+                  </button>
+                </div>
+              </div>
+            </form>
           </div>
         </div>
       )}
@@ -742,6 +978,11 @@ export const SystemManagementView: React.FC = () => {
             </form>
           </div>
         </div>
+      )}
+
+      {/* TAB 5: IDENTITAS PENGEMBANG */}
+      {activeTab === 'developer_identity' && (
+        <DeveloperIdentityView />
       )}
     </div>
   );

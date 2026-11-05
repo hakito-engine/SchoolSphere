@@ -519,6 +519,8 @@ export interface DutyTeacherRecord {
   teacherId: string;
   teacherName: string;
   status: 'hadir' | 'tidak_hadir';
+  checkInTime?: string; // Jam Datang (e.g. 06:45)
+  checkOutTime?: string; // Jam Pulang (e.g. 15:30)
   absenceReason?: 'Tanpa Keterangan' | 'Izin' | 'Sakit' | 'Terlambat' | 'Dinas Luar';
   absenceNotes?: string;
   slots: DutyTeacherScheduleSlot[];
@@ -570,8 +572,22 @@ export interface DutyIncidentRecord {
   involvesStudents: boolean; // Centang "Melibatkan Siswa"
   involvedStudentIds: string[]; // Siswa-siswa bermasalah berdasarkan filter kelas
   involvedStudentNames: string[];
+  involvesTeachers?: boolean; // Centang "Melibatkan Guru"
+  involvedTeacherIds?: string[];
+  involvedTeacherNames?: string[];
+  involvesStaff?: boolean; // Centang "Melibatkan Tendik/Pegawai"
+  involvedStaffIds?: string[];
+  involvedStaffNames?: string[];
   followUp: string; // Tindak Lanjut Penyelesaian
   referredToBK?: boolean; // Rekomendasi Rujuk ke Guru BK
+}
+
+export interface DailyWorkingHour {
+  day: string; // 'Senin' | 'Selasa' | 'Rabu' | 'Kamis' | 'Jumat' | 'Sabtu' | 'Minggu'
+  isWorkDay: boolean;
+  startTime: string; // '07:00'
+  endTime: string; // '15:30'
+  notes?: string;
 }
 
 export interface DutyJournal {
@@ -602,6 +618,48 @@ export interface DutyJournal {
   createdAt: string;
   createdBy: string;
   status: 'draft' | 'submitted' | 'published';
+}
+
+export interface ParentNoticeLetter {
+  id: string;
+  letterNumber: string; // Nomor Surat (custom)
+  letterType: 'pemanggilan' | 'pemberitahuan' | 'peringatan';
+  letterDate: string; // Tanggal surat YYYY-MM-DD
+  city: string; // Kota Penerbitan Surat
+
+  // Data Siswa & Orang Tua
+  studentId: string;
+  studentName: string;
+  studentNis?: string;
+  studentNisn?: string;
+  className: string;
+  parentName: string;
+  parentPhone: string; // No WA Orang Tua
+
+  // Rincian Pemanggilan / Pertemuan
+  meetingDayDate: string; // Hari, Tanggal Pertemuan
+  meetingTime: string; // Waktu / Jam
+  meetingPlace: string; // Tempat
+  agenda: string; // Keperluan / Pokok Permasalahan
+  personToMeet: string; // Menemui Siapa
+
+  // Penandatangan Pembuat Surat (Wali Kelas atau Guru BK)
+  signerRole: 'wali_kelas' | 'guru_bk';
+  signerTitle: string;
+  signerName: string;
+  signerNip?: string;
+  signerSignatureImage?: string; // Gambar TTD .PNG base64
+
+  // Penandatangan Kepala Sekolah (Mengetahui)
+  headmasterName: string;
+  headmasterNip: string;
+  headmasterSignatureImage?: string; // Gambar TTD Kepsek .PNG base64
+
+  // Opsi tanda tangan basah (tanda tangan digital dikosongkan)
+  useWetSignature: boolean;
+
+  createdAt: string;
+  createdBy: string;
 }
 
 

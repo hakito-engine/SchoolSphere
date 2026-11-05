@@ -128,8 +128,8 @@ export const Navbar: React.FC<NavbarProps> = ({
           />
           <div>
             <div className="flex items-center gap-2">
-              <span className="font-extrabold text-sm tracking-tight text-slate-900 dark:text-white whitespace-nowrap">
-                SISPAM <span className="text-indigo-600 dark:text-indigo-400">PRO</span>
+              <span className="font-extrabold text-sm tracking-tight text-indigo-600 dark:text-indigo-400 whitespace-nowrap">
+                SISPAM
               </span>
               <span className="text-[10px] text-slate-500 dark:text-slate-400 hidden xl:inline">
                 · Sistem Integrasi Sekolah, Pembelajaran, & Administrasi

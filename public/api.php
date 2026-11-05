@@ -1,48 +1,67 @@
 <?php
 /**
- * SISPAM Cloud & MySQL Sync Engine for Rumahweb (cPanel / Apache / LiteSpeed)
+ * =========================================================================
+ * SISPAM MySQL & Cloud Database Engine (cPanel / Apache / LiteSpeed)
  * Domain: sispam.hakito.my.id
  *
- * Mendukung 2 Mode Penyimpanan Otomatis:
- * 1. Mode Database Relasional MySQL / MariaDB (Direkomendasikan untuk cPanel)
- * 2. Mode Berkas JSON Server (Fallback instan tanpa koding)
+ * Terintegrasi penuh dengan phpMyAdmin & MySQL Relasional:
+ * - Tabel users (Admin, Guru, Tendik, Siswa, Ortu)
+ * - Tabel students, teachers, staff, classes, subjects
+ * - Tabel duty_schedules & duty_journals (Piket Sekolah)
+ * - Tabel school_profile & sispam_cloud_data
+ *
+ * REVISI TERUJI: 
+ *  - Fix #1: Sinkronisasi hapus baris orphan di semua tabel relasional
+ *  - Fix #2: PUSH dibungkus transaksi atomic PDO + error dilaporkan ke frontend
+ *  - Fix #3: PULL membaca students & duty_schedules dari tabel live
+ *  - Fix #4: Header anti-cache pada response GET pull & status
+ * =========================================================================
  */
 
-// Header CORS & Keamanan
+// 1. Header CORS & Response
 header('Access-Control-Allow-Origin: *');
 header('Access-Control-Allow-Methods: GET, POST, OPTIONS');
 header('Access-Control-Allow-Headers: Content-Type, Authorization, X-Requested-With');
 header('Content-Type: application/json; charset=utf-8');
 
-// Tangani preflight OPTIONS request
+// Anti-cache untuk semua response API (khususnya PULL & status)
+header('Cache-Control: no-store, no-cache, must-revalidate, max-age=0');
+header('Pragma: no-cache');
+header('Expires: 0');
+
+// Preflight CORS
 if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
     http_response_code(200);
     exit;
 }
 
+// Lokasi berkas konfigurasi & data
 $dataDir = __DIR__ . '/data';
 if (!is_dir($dataDir)) {
     @mkdir($dataDir, 0755, true);
-    @file_put_contents($dataDir . '/.htaccess', "Deny from all\n");
+    @chmod($dataDir, 0755);
 }
 
 $dbConfigFile = __DIR__ . '/db_config.php';
 $jsonDbFile   = $dataDir . '/sispam_database.json';
-$action       = isset($_GET['action']) ? $_GET['action'] : '';
+$action       = isset($_GET['action']) ? trim($_GET['action']) : '';
 
-// Fungsi helper koneksi PDO MySQL
+// -------------------------------------------------------------------------
+// Helper: Koneksi Database MySQL (PDO)
+// -------------------------------------------------------------------------
 function getMySQLConnection() {
     global $dbConfigFile;
     if (!file_exists($dbConfigFile)) {
         return null;
     }
+
     $cfg = @include $dbConfigFile;
     if (!is_array($cfg) || empty($cfg['database']) || empty($cfg['username'])) {
         return null;
     }
 
     $host = !empty($cfg['host']) ? $cfg['host'] : 'localhost';
-    $port = !empty($cfg['port']) ? $cfg['port'] : 3306;
+    $port = !empty($cfg['port']) ? intval($cfg['port']) : 3306;
     $db   = $cfg['database'];
     $user = $cfg['username'];
     $pass = isset($cfg['password']) ? $cfg['password'] : '';
@@ -54,21 +73,614 @@ function getMySQLConnection() {
             PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
             PDO::ATTR_TIMEOUT => 5
         ]);
-
-        // Pastikan tabel penampung sinkronisasi cloud siap
-        $pdo->exec("CREATE TABLE IF NOT EXISTS `sispam_cloud_data` (
-            `id` VARCHAR(50) NOT NULL PRIMARY KEY,
-            `payload` LONGTEXT NOT NULL,
-            `updated_at` DATETIME NOT NULL
-        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;");
-
         return $pdo;
     } catch (Exception $e) {
+        error_log('SISPAM MySQL Connection Error: ' . $e->getMessage());
         return null;
     }
 }
 
-// 1. Simpan Konfigurasi Database MySQL dari Form SISPAM
+// -------------------------------------------------------------------------
+// Helper: Buat Seluruh Tabel Relasional di phpMyAdmin secara Otomatis
+// -------------------------------------------------------------------------
+function ensureRelationalTables(PDO $pdo) {
+    try {
+        $pdo->exec("CREATE TABLE IF NOT EXISTS `users` (
+            `id` VARCHAR(50) NOT NULL PRIMARY KEY,
+            `username` VARCHAR(100) NOT NULL UNIQUE,
+            `password` VARCHAR(255) NOT NULL,
+            `name` VARCHAR(150) NOT NULL,
+            `role` VARCHAR(50) NOT NULL,
+            `email` VARCHAR(150) DEFAULT NULL,
+            `phone` VARCHAR(50) DEFAULT NULL,
+            `nip_or_nisn` VARCHAR(50) DEFAULT NULL,
+            `status` VARCHAR(20) NOT NULL DEFAULT 'active',
+            `avatar` TEXT DEFAULT NULL,
+            `created_at` DATETIME DEFAULT CURRENT_TIMESTAMP,
+            `updated_at` DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;");
+
+        $pdo->exec("CREATE TABLE IF NOT EXISTS `teachers` (
+            `id` VARCHAR(50) NOT NULL PRIMARY KEY,
+            `nip` VARCHAR(50) DEFAULT NULL,
+            `name` VARCHAR(150) NOT NULL,
+            `email` VARCHAR(150) DEFAULT NULL,
+            `phone` VARCHAR(50) DEFAULT NULL,
+            `gender` VARCHAR(20) DEFAULT 'Laki-laki',
+            `position` VARCHAR(100) DEFAULT 'Guru Mata Pelajaran',
+            `status` VARCHAR(50) DEFAULT 'PNS',
+            `subjects_json` TEXT DEFAULT NULL,
+            `updated_at` DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;");
+
+        $pdo->exec("CREATE TABLE IF NOT EXISTS `staff` (
+            `id` VARCHAR(50) NOT NULL PRIMARY KEY,
+            `nip` VARCHAR(50) DEFAULT NULL,
+            `name` VARCHAR(150) NOT NULL,
+            `email` VARCHAR(150) DEFAULT NULL,
+            `phone` VARCHAR(50) DEFAULT NULL,
+            `gender` VARCHAR(20) DEFAULT 'Laki-laki',
+            `position` VARCHAR(100) NOT NULL,
+            `status` VARCHAR(50) DEFAULT 'PNS',
+            `updated_at` DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;");
+
+        $pdo->exec("CREATE TABLE IF NOT EXISTS `classes` (
+            `id` VARCHAR(50) NOT NULL PRIMARY KEY,
+            `name` VARCHAR(100) NOT NULL,
+            `grade` VARCHAR(20) NOT NULL,
+            `major` VARCHAR(100) DEFAULT NULL,
+            `academic_year` VARCHAR(50) NOT NULL,
+            `homeroom_teacher_name` VARCHAR(150) DEFAULT NULL,
+            `homeroom_teacher_id` VARCHAR(50) DEFAULT NULL,
+            `updated_at` DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;");
+
+        $pdo->exec("CREATE TABLE IF NOT EXISTS `subjects` (
+            `id` VARCHAR(50) NOT NULL PRIMARY KEY,
+            `code` VARCHAR(50) DEFAULT NULL,
+            `name` VARCHAR(150) NOT NULL,
+            `grade` VARCHAR(20) DEFAULT NULL,
+            `credits` INT DEFAULT 2,
+            `updated_at` DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;");
+
+        $pdo->exec("CREATE TABLE IF NOT EXISTS `students` (
+            `id` VARCHAR(50) NOT NULL PRIMARY KEY,
+            `nisn` VARCHAR(50) NOT NULL,
+            `nis` VARCHAR(50) DEFAULT NULL,
+            `name` VARCHAR(150) NOT NULL,
+            `gender` VARCHAR(20) DEFAULT 'L',
+            `class_id` VARCHAR(50) DEFAULT NULL,
+            `class_name` VARCHAR(50) DEFAULT NULL,
+            `phone` VARCHAR(50) DEFAULT NULL,
+            `parent_name` VARCHAR(150) DEFAULT NULL,
+            `parent_phone` VARCHAR(50) DEFAULT NULL,
+            `address` TEXT DEFAULT NULL,
+            `status` VARCHAR(50) DEFAULT 'Aktif',
+            `academic_year` VARCHAR(50) DEFAULT NULL,
+            `updated_at` DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;");
+
+        $pdo->exec("CREATE TABLE IF NOT EXISTS `duty_schedules` (
+            `id` VARCHAR(100) NOT NULL PRIMARY KEY,
+            `day` VARCHAR(20) NOT NULL,
+            `academic_year` VARCHAR(50) NOT NULL,
+            `semester` VARCHAR(20) NOT NULL,
+            `start_date` DATE DEFAULT NULL,
+            `end_date` DATE DEFAULT NULL,
+            `standby_location` VARCHAR(150) DEFAULT NULL,
+            `officers_json` LONGTEXT DEFAULT NULL,
+            `notes` TEXT DEFAULT NULL,
+            `updated_at` DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;");
+
+        $pdo->exec("CREATE TABLE IF NOT EXISTS `duty_journals` (
+            `id` VARCHAR(100) NOT NULL PRIMARY KEY,
+            `journal_date` DATE NOT NULL UNIQUE,
+            `journal_day` VARCHAR(20) NOT NULL,
+            `academic_year` VARCHAR(50) NOT NULL,
+            `semester` VARCHAR(20) NOT NULL,
+            `officer1_id` VARCHAR(50) DEFAULT NULL,
+            `officer2_id` VARCHAR(50) DEFAULT NULL,
+            `officer3_id` VARCHAR(50) DEFAULT NULL,
+            `status` VARCHAR(50) DEFAULT 'published',
+            `payload_json` LONGTEXT DEFAULT NULL,
+            `published_at` DATETIME DEFAULT NULL,
+            `updated_at` DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;");
+
+        $pdo->exec("CREATE TABLE IF NOT EXISTS `school_profile` (
+            `id` VARCHAR(50) NOT NULL PRIMARY KEY,
+            `name` VARCHAR(200) NOT NULL,
+            `npsn` VARCHAR(50) DEFAULT NULL,
+            `address` TEXT DEFAULT NULL,
+            `principal_name` VARCHAR(150) DEFAULT NULL,
+            `principal_nip` VARCHAR(50) DEFAULT NULL,
+            `payload_json` LONGTEXT DEFAULT NULL,
+            `updated_at` DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;");
+
+        $pdo->exec("CREATE TABLE IF NOT EXISTS `sispam_cloud_data` (
+            `id` VARCHAR(50) NOT NULL PRIMARY KEY,
+            `payload` LONGTEXT NOT NULL,
+            `updated_at` DATETIME NOT NULL
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;");
+
+    } catch (Exception $e) {
+        error_log('SISPAM Table Migration Error: ' . $e->getMessage());
+    }
+}
+
+// -------------------------------------------------------------------------
+// Fix #1: Helper - Hapus baris yang sudah tidak ada di payload (orphan)
+// -------------------------------------------------------------------------
+function deleteOrphanRows(PDO $pdo, string $table, array $activeIds) {
+    try {
+        if (empty($activeIds)) {
+            $pdo->exec("DELETE FROM `{$table}`");
+            return;
+        }
+        $placeholders = implode(',', array_fill(0, count($activeIds), '?'));
+        $stmt = $pdo->prepare("DELETE FROM `{$table}` WHERE `id` NOT IN ($placeholders)");
+        $stmt->execute(array_values($activeIds));
+    } catch (Exception $e) {
+        error_log("SISPAM deleteOrphanRows [{$table}] Error: " . $e->getMessage());
+        throw $e;
+    }
+}
+
+// -------------------------------------------------------------------------
+// Helper: Sinkronisasi Data Relasional dari Payload JSON ke Tabel MySQL
+// -------------------------------------------------------------------------
+function syncPayloadToRelationalTables(PDO $pdo, array $data) {
+    // 1. Sinkronisasi Users
+    if (isset($data['users']) && is_array($data['users'])) {
+        $userStmt = $pdo->prepare("INSERT INTO `users`
+            (`id`, `username`, `password`, `name`, `role`, `email`, `phone`, `nip_or_nisn`, `status`, `avatar`, `updated_at`)
+            VALUES (:id, :username, :password, :name, :role, :email, :phone, :nip_or_nisn, :status, :avatar, NOW())
+            ON DUPLICATE KEY UPDATE
+                `username` = VALUES(`username`),
+                `password` = VALUES(`password`),
+                `name` = VALUES(`name`),
+                `role` = VALUES(`role`),
+                `email` = VALUES(`email`),
+                `phone` = VALUES(`phone`),
+                `nip_or_nisn` = VALUES(`nip_or_nisn`),
+                `status` = VALUES(`status`),
+                `avatar` = VALUES(`avatar`),
+                `updated_at` = NOW()");
+
+        $activeIds = [];
+        foreach ($data['users'] as $u) {
+            if (empty($u['id']) || empty($u['username'])) continue;
+            $activeIds[] = $u['id'];
+            $userStmt->execute([
+                ':id' => $u['id'],
+                ':username' => trim($u['username']),
+                ':password' => isset($u['password']) ? $u['password'] : '123456',
+                ':name' => isset($u['name']) ? $u['name'] : 'User',
+                ':role' => isset($u['role']) ? $u['role'] : 'guru',
+                ':email' => isset($u['email']) ? $u['email'] : null,
+                ':phone' => isset($u['phone']) ? $u['phone'] : null,
+                ':nip_or_nisn' => isset($u['nipOrNisn']) ? $u['nipOrNisn'] : null,
+                ':status' => isset($u['status']) ? $u['status'] : 'active',
+                ':avatar' => isset($u['avatar']) ? $u['avatar'] : null,
+            ]);
+        }
+        deleteOrphanRows($pdo, 'users', $activeIds);
+    }
+
+    // 2. Sinkronisasi Teachers
+    if (isset($data['teachers']) && is_array($data['teachers'])) {
+        $tStmt = $pdo->prepare("INSERT INTO `teachers`
+            (`id`, `nip`, `name`, `email`, `phone`, `gender`, `position`, `status`, `subjects_json`, `updated_at`)
+            VALUES (:id, :nip, :name, :email, :phone, :gender, :position, :status, :subjects_json, NOW())
+            ON DUPLICATE KEY UPDATE
+                `nip` = VALUES(`nip`),
+                `name` = VALUES(`name`),
+                `email` = VALUES(`email`),
+                `phone` = VALUES(`phone`),
+                `gender` = VALUES(`gender`),
+                `position` = VALUES(`position`),
+                `status` = VALUES(`status`),
+                `subjects_json` = VALUES(`subjects_json`),
+                `updated_at` = NOW()");
+
+        $activeIds = [];
+        foreach ($data['teachers'] as $t) {
+            if (empty($t['id']) || empty($t['name'])) continue;
+            $activeIds[] = $t['id'];
+            $tStmt->execute([
+                ':id' => $t['id'],
+                ':nip' => isset($t['nip']) ? $t['nip'] : null,
+                ':name' => $t['name'],
+                ':email' => isset($t['email']) ? $t['email'] : null,
+                ':phone' => isset($t['phone']) ? $t['phone'] : null,
+                ':gender' => isset($t['gender']) ? $t['gender'] : 'Laki-laki',
+                ':position' => isset($t['position']) ? $t['position'] : 'Guru',
+                ':status' => isset($t['status']) ? $t['status'] : 'PNS',
+                ':subjects_json' => isset($t['subjectNames']) ? json_encode($t['subjectNames'], JSON_UNESCAPED_UNICODE) : null,
+            ]);
+        }
+        deleteOrphanRows($pdo, 'teachers', $activeIds);
+    }
+
+    // 3. Sinkronisasi Staff / Tendik
+    if (isset($data['staff']) && is_array($data['staff'])) {
+        $stStmt = $pdo->prepare("INSERT INTO `staff`
+            (`id`, `nip`, `name`, `email`, `phone`, `gender`, `position`, `status`, `updated_at`)
+            VALUES (:id, :nip, :name, :email, :phone, :gender, :position, :status, NOW())
+            ON DUPLICATE KEY UPDATE
+                `nip` = VALUES(`nip`),
+                `name` = VALUES(`name`),
+                `email` = VALUES(`email`),
+                `phone` = VALUES(`phone`),
+                `gender` = VALUES(`gender`),
+                `position` = VALUES(`position`),
+                `status` = VALUES(`status`),
+                `updated_at` = NOW()");
+
+        $activeIds = [];
+        foreach ($data['staff'] as $st) {
+            if (empty($st['id']) || empty($st['name'])) continue;
+            $activeIds[] = $st['id'];
+            $stStmt->execute([
+                ':id' => $st['id'],
+                ':nip' => isset($st['nip']) ? $st['nip'] : null,
+                ':name' => $st['name'],
+                ':email' => isset($st['email']) ? $st['email'] : null,
+                ':phone' => isset($st['phone']) ? $st['phone'] : null,
+                ':gender' => isset($st['gender']) ? $st['gender'] : 'Laki-laki',
+                ':position' => isset($st['position']) ? $st['position'] : 'Staff',
+                ':status' => isset($st['status']) ? $st['status'] : 'PNS',
+            ]);
+        }
+        deleteOrphanRows($pdo, 'staff', $activeIds);
+    }
+
+    // 4. Sinkronisasi Classes
+    if (isset($data['classes']) && is_array($data['classes'])) {
+        $cStmt = $pdo->prepare("INSERT INTO `classes`
+            (`id`, `name`, `grade`, `major`, `academic_year`, `homeroom_teacher_name`, `homeroom_teacher_id`, `updated_at`)
+            VALUES (:id, :name, :grade, :major, :academic_year, :homeroom_teacher_name, :homeroom_teacher_id, NOW())
+            ON DUPLICATE KEY UPDATE
+                `name` = VALUES(`name`),
+                `grade` = VALUES(`grade`),
+                `major` = VALUES(`major`),
+                `academic_year` = VALUES(`academic_year`),
+                `homeroom_teacher_name` = VALUES(`homeroom_teacher_name`),
+                `homeroom_teacher_id` = VALUES(`homeroom_teacher_id`),
+                `updated_at` = NOW()");
+
+        $activeIds = [];
+        foreach ($data['classes'] as $c) {
+            if (empty($c['id']) || empty($c['name'])) continue;
+            $activeIds[] = $c['id'];
+            $cStmt->execute([
+                ':id' => $c['id'],
+                ':name' => $c['name'],
+                ':grade' => isset($c['grade']) ? $c['grade'] : 'X',
+                ':major' => isset($c['major']) ? $c['major'] : null,
+                ':academic_year' => isset($c['academicYear']) ? $c['academicYear'] : '2026/2027',
+                ':homeroom_teacher_name' => isset($c['homeroomTeacherName']) ? $c['homeroomTeacherName'] : null,
+                ':homeroom_teacher_id' => isset($c['homeroomTeacherId']) ? $c['homeroomTeacherId'] : null,
+            ]);
+        }
+        deleteOrphanRows($pdo, 'classes', $activeIds);
+    }
+
+    // 5. Sinkronisasi Students
+    if (isset($data['students']) && is_array($data['students'])) {
+        $sStmt = $pdo->prepare("INSERT INTO `students`
+            (`id`, `nisn`, `nis`, `name`, `gender`, `class_id`, `class_name`, `phone`, `parent_name`, `parent_phone`, `address`, `status`, `academic_year`, `updated_at`)
+            VALUES (:id, :nisn, :nis, :name, :gender, :class_id, :class_name, :phone, :parent_name, :parent_phone, :address, :status, :academic_year, NOW())
+            ON DUPLICATE KEY UPDATE
+                `nisn` = VALUES(`nisn`),
+                `nis` = VALUES(`nis`),
+                `name` = VALUES(`name`),
+                `gender` = VALUES(`gender`),
+                `class_id` = VALUES(`class_id`),
+                `class_name` = VALUES(`class_name`),
+                `phone` = VALUES(`phone`),
+                `parent_name` = VALUES(`parent_name`),
+                `parent_phone` = VALUES(`parent_phone`),
+                `address` = VALUES(`address`),
+                `status` = VALUES(`status`),
+                `academic_year` = VALUES(`academic_year`),
+                `updated_at` = NOW()");
+
+        $activeIds = [];
+        foreach ($data['students'] as $s) {
+            if (empty($s['id']) || empty($s['name'])) continue;
+            $activeIds[] = $s['id'];
+            $sStmt->execute([
+                ':id' => $s['id'],
+                ':nisn' => isset($s['nisn']) ? $s['nisn'] : '-',
+                ':nis' => isset($s['nis']) ? $s['nis'] : null,
+                ':name' => $s['name'],
+                ':gender' => isset($s['gender']) ? $s['gender'] : 'L',
+                ':class_id' => isset($s['classId']) ? $s['classId'] : null,
+                ':class_name' => isset($s['className']) ? $s['className'] : null,
+                ':phone' => isset($s['phone']) ? $s['phone'] : null,
+                ':parent_name' => isset($s['parentName']) ? $s['parentName'] : null,
+                ':parent_phone' => isset($s['parentPhone']) ? $s['parentPhone'] : null,
+                ':address' => isset($s['address']) ? $s['address'] : null,
+                ':status' => isset($s['status']) ? $s['status'] : 'Aktif',
+                ':academic_year' => isset($s['academicYear']) ? $s['academicYear'] : null,
+            ]);
+        }
+        deleteOrphanRows($pdo, 'students', $activeIds);
+    }
+
+    // 6. Sinkronisasi Duty Schedules (Mendukung duty_schedules & dutySchedules)
+    $dutySchedules = isset($data['duty_schedules']) ? $data['duty_schedules'] : (isset($data['dutySchedules']) ? $data['dutySchedules'] : null);
+    if ($dutySchedules && is_array($dutySchedules)) {
+        $schStmt = $pdo->prepare("INSERT INTO `duty_schedules`
+            (`id`, `day`, `academic_year`, `semester`, `start_date`, `end_date`, `standby_location`, `officers_json`, `notes`, `updated_at`)
+            VALUES (:id, :day, :academic_year, :semester, :start_date, :end_date, :standby_location, :officers_json, :notes, NOW())
+            ON DUPLICATE KEY UPDATE
+                `day` = VALUES(`day`),
+                `academic_year` = VALUES(`academic_year`),
+                `semester` = VALUES(`semester`),
+                `start_date` = VALUES(`start_date`),
+                `end_date` = VALUES(`end_date`),
+                `standby_location` = VALUES(`standby_location`),
+                `officers_json` = VALUES(`officers_json`),
+                `notes` = VALUES(`notes`),
+                `updated_at` = NOW()");
+
+        $activeIds = [];
+        foreach ($dutySchedules as $sch) {
+            if (empty($sch['id'])) continue;
+            $activeIds[] = $sch['id'];
+            $schStmt->execute([
+                ':id' => $sch['id'],
+                ':day' => $sch['day'],
+                ':academic_year' => isset($sch['academicYear']) ? $sch['academicYear'] : '2026/2027',
+                ':semester' => isset($sch['semester']) ? $sch['semester'] : 'Ganjil',
+                ':start_date' => !empty($sch['startDate']) ? $sch['startDate'] : null,
+                ':end_date' => !empty($sch['endDate']) ? $sch['endDate'] : null,
+                ':standby_location' => isset($sch['standbyLocation']) ? $sch['standbyLocation'] : null,
+                ':officers_json' => isset($sch['dutyOfficers']) ? json_encode($sch['dutyOfficers'], JSON_UNESCAPED_UNICODE) : null,
+                ':notes' => isset($sch['notes']) ? $sch['notes'] : null,
+            ]);
+        }
+        deleteOrphanRows($pdo, 'duty_schedules', $activeIds);
+    }
+
+    // 7. Sinkronisasi Duty Journals (Mendukung duty_journals & dutyJournals)
+    $dutyJournals = isset($data['duty_journals']) ? $data['duty_journals'] : (isset($data['dutyJournals']) ? $data['dutyJournals'] : null);
+    if ($dutyJournals && is_array($dutyJournals)) {
+        $jrnStmt = $pdo->prepare("INSERT INTO `duty_journals`
+            (`id`, `journal_date`, `journal_day`, `academic_year`, `semester`, `officer1_id`, `officer2_id`, `officer3_id`, `status`, `payload_json`, `published_at`, `updated_at`)
+            VALUES (:id, :journal_date, :journal_day, :academic_year, :semester, :officer1_id, :officer2_id, :officer3_id, :status, :payload_json, :published_at, NOW())
+            ON DUPLICATE KEY UPDATE
+                `journal_day` = VALUES(`journal_day`),
+                `academic_year` = VALUES(`academic_year`),
+                `semester` = VALUES(`semester`),
+                `officer1_id` = VALUES(`officer1_id`),
+                `officer2_id` = VALUES(`officer2_id`),
+                `officer3_id` = VALUES(`officer3_id`),
+                `status` = VALUES(`status`),
+                `payload_json` = VALUES(`payload_json`),
+                `published_at` = VALUES(`published_at`),
+                `updated_at` = NOW()");
+
+        $activeIds = [];
+        foreach ($dutyJournals as $jrn) {
+            if (empty($jrn['id']) || empty($jrn['date'])) continue;
+            $activeIds[] = $jrn['id'];
+            $jrnStmt->execute([
+                ':id' => $jrn['id'],
+                ':journal_date' => $jrn['date'],
+                ':journal_day' => isset($jrn['day']) ? $jrn['day'] : 'Senin',
+                ':academic_year' => isset($jrn['academicYear']) ? $jrn['academicYear'] : '2026/2027',
+                ':semester' => isset($jrn['semester']) ? $jrn['semester'] : 'Ganjil',
+                ':officer1_id' => isset($jrn['officer1Id']) ? $jrn['officer1Id'] : null,
+                ':officer2_id' => isset($jrn['officer2Id']) ? $jrn['officer2Id'] : null,
+                ':officer3_id' => isset($jrn['officer3Id']) ? $jrn['officer3Id'] : null,
+                ':status' => isset($jrn['status']) ? $jrn['status'] : 'published',
+                ':payload_json' => json_encode($jrn, JSON_UNESCAPED_UNICODE),
+                ':published_at' => !empty($jrn['publishedAt']) ? $jrn['publishedAt'] : date('Y-m-d H:i:s'),
+            ]);
+        }
+        deleteOrphanRows($pdo, 'duty_journals', $activeIds);
+    }
+}
+
+// -------------------------------------------------------------------------
+// Helper: Rekonstruksi Dataset PULL dari Tabel-Tabel Relasional MySQL
+// -------------------------------------------------------------------------
+function pullFromRelationalTables(PDO $pdo) {
+    ensureRelationalTables($pdo);
+
+    $dataset = [];
+
+    // 1. Ambil payload cadangan terlebih dahulu
+    try {
+        $stmt = $pdo->query("SELECT payload FROM `sispam_cloud_data` WHERE id = 'main_database' LIMIT 1");
+        $row = $stmt->fetch();
+        if ($row && !empty($row['payload'])) {
+            $dataset = json_decode($row['payload'], true) ?: [];
+        }
+    } catch (Exception $e) {}
+
+    // 2. Timpa dengan data live dari tabel `users`
+    try {
+        $userRows = $pdo->query("SELECT * FROM `users` ORDER BY `name` ASC")->fetchAll();
+        if (!empty($userRows)) {
+            $dataset['users'] = array_map(function($u) {
+                return [
+                    'id' => $u['id'],
+                    'username' => $u['username'],
+                    'password' => $u['password'],
+                    'name' => $u['name'],
+                    'role' => $u['role'],
+                    'email' => $u['email'] ?: '',
+                    'phone' => $u['phone'] ?: '',
+                    'nipOrNisn' => $u['nip_or_nisn'] ?: '',
+                    'status' => $u['status'] ?: 'active',
+                    'avatar' => $u['avatar'] ?: '',
+                ];
+            }, $userRows);
+        }
+    } catch (Exception $e) {}
+
+    // 3. Timpa dengan data live dari tabel `teachers`
+    try {
+        $tRows = $pdo->query("SELECT * FROM `teachers` ORDER BY `name` ASC")->fetchAll();
+        if (!empty($tRows)) {
+            $dataset['teachers'] = array_map(function($t) {
+                return [
+                    'id' => $t['id'],
+                    'nip' => $t['nip'] ?: '',
+                    'name' => $t['name'],
+                    'email' => $t['email'] ?: '',
+                    'phone' => $t['phone'] ?: '',
+                    'gender' => $t['gender'] ?: 'Laki-laki',
+                    'position' => $t['position'] ?: 'Guru',
+                    'status' => $t['status'] ?: 'PNS',
+                    'subjectNames' => !empty($t['subjects_json']) ? json_decode($t['subjects_json'], true) : [],
+                ];
+            }, $tRows);
+        }
+    } catch (Exception $e) {}
+
+    // 4. Timpa dengan data live dari tabel `staff`
+    try {
+        $stRows = $pdo->query("SELECT * FROM `staff` ORDER BY `name` ASC")->fetchAll();
+        if (!empty($stRows)) {
+            $dataset['staff'] = array_map(function($st) {
+                return [
+                    'id' => $st['id'],
+                    'nip' => $st['nip'] ?: '',
+                    'name' => $st['name'],
+                    'email' => $st['email'] ?: '',
+                    'phone' => $st['phone'] ?: '',
+                    'gender' => $st['gender'] ?: 'Laki-laki',
+                    'position' => $st['position'] ?: 'Pegawai',
+                    'status' => $st['status'] ?: 'PNS',
+                ];
+            }, $stRows);
+        }
+    } catch (Exception $e) {}
+
+    // 5. Timpa dengan data live dari tabel `classes`
+    try {
+        $cRows = $pdo->query("SELECT * FROM `classes` ORDER BY `grade` ASC, `name` ASC")->fetchAll();
+        if (!empty($cRows)) {
+            $dataset['classes'] = array_map(function($c) {
+                return [
+                    'id' => $c['id'],
+                    'name' => $c['name'],
+                    'grade' => $c['grade'],
+                    'major' => $c['major'] ?: '',
+                    'academicYear' => $c['academic_year'],
+                    'homeroomTeacherName' => $c['homeroom_teacher_name'] ?: '',
+                    'homeroomTeacherId' => $c['homeroom_teacher_id'] ?: '',
+                ];
+            }, $cRows);
+        }
+    } catch (Exception $e) {}
+
+    // 6. Timpa dengan data live dari tabel `students`
+    try {
+        $sRows = $pdo->query("SELECT * FROM `students` ORDER BY `name` ASC")->fetchAll();
+        if (!empty($sRows)) {
+            $cachedMap = [];
+            if (!empty($dataset['students']) && is_array($dataset['students'])) {
+                foreach ($dataset['students'] as $cs) {
+                    if (!empty($cs['id'])) $cachedMap[$cs['id']] = $cs;
+                }
+            }
+
+            $dataset['students'] = array_map(function($s) use ($cachedMap) {
+                $id = $s['id'];
+                $cached = isset($cachedMap[$id]) ? $cachedMap[$id] : [];
+                return array_merge($cached, [
+                    'id' => $id,
+                    'nisn' => $s['nisn'] ?? ($cached['nisn'] ?? ''),
+                    'nis' => $s['nis'] ?? ($cached['nis'] ?? ''),
+                    'name' => $s['name'],
+                    'gender' => $s['gender'] ?? ($cached['gender'] ?? 'L'),
+                    'classId' => $s['class_id'] ?? ($cached['classId'] ?? ''),
+                    'className' => $s['class_name'] ?? ($cached['className'] ?? ''),
+                    'phone' => $s['phone'] ?? ($cached['phone'] ?? ''),
+                    'parentName' => $s['parent_name'] ?? ($cached['parentName'] ?? ''),
+                    'parentPhone' => $s['parent_phone'] ?? ($cached['parentPhone'] ?? ''),
+                    'address' => $s['address'] ?? ($cached['address'] ?? ''),
+                    'status' => $s['status'] ?? ($cached['status'] ?? 'aktif'),
+                    'academicYear' => $s['academic_year'] ?? ($cached['academicYear'] ?? ''),
+                    'attendance' => isset($cached['attendance']) ? $cached['attendance'] : [
+                        'hadir' => 52,
+                        'sakit' => 1,
+                        'izin' => 1,
+                        'alpa' => 0,
+                        'terlambat' => 0
+                    ],
+                    'gpa' => isset($cached['gpa']) ? $cached['gpa'] : 85,
+                    'birthPlaceDate' => isset($cached['birthPlaceDate']) ? $cached['birthPlaceDate'] : 'Jakarta, 12 Januari 2008',
+                    'parentId' => isset($cached['parentId']) ? $cached['parentId'] : ('prnt-' . $id),
+                ]);
+            }, $sRows);
+        }
+    } catch (Exception $e) {}
+
+    // 7. Timpa dengan data live dari tabel `duty_schedules`
+    try {
+        $schRows = $pdo->query("SELECT * FROM `duty_schedules` ORDER BY `day` ASC")->fetchAll();
+        if (!empty($schRows)) {
+            $dataset['duty_schedules'] = array_map(function($sch) {
+                return [
+                    'id' => $sch['id'],
+                    'day' => $sch['day'],
+                    'academicYear' => $sch['academic_year'],
+                    'semester' => $sch['semester'],
+                    'startDate' => $sch['start_date'] ?? '',
+                    'endDate' => $sch['end_date'] ?? '',
+                    'standbyLocation' => $sch['standby_location'] ?? '',
+                    'dutyOfficers' => !empty($sch['officers_json']) ? json_decode($sch['officers_json'], true) : [],
+                    'notes' => $sch['notes'] ?? '',
+                ];
+            }, $schRows);
+        }
+    } catch (Exception $e) {}
+
+    // 8. Timpa dengan data live dari tabel `duty_journals`
+    try {
+        $jrnRows = $pdo->query("SELECT payload_json FROM `duty_journals` ORDER BY `journal_date` DESC")->fetchAll();
+        if (!empty($jrnRows)) {
+            $parsedJournals = [];
+            foreach ($jrnRows as $jr) {
+                if (!empty($jr['payload_json'])) {
+                    $item = json_decode($jr['payload_json'], true);
+                    if ($item) $parsedJournals[] = $item;
+                }
+            }
+            if (!empty($parsedJournals)) {
+                $dataset['duty_journals'] = $parsedJournals;
+            }
+        }
+    } catch (Exception $e) {}
+
+    // Ekspor ganda (camelCase & snake_case) untuk kompatibilitas sempurna dengan semua modul frontend
+    if (!empty($dataset['duty_schedules'])) {
+        $dataset['dutySchedules'] = $dataset['duty_schedules'];
+    }
+    if (!empty($dataset['duty_journals'])) {
+        $dataset['dutyJournals'] = $dataset['duty_journals'];
+    }
+
+    return $dataset;
+}
+
+
+// =========================================================================
+// ROUTING AKSI API
+// =========================================================================
+
+// 1. Simpan & Uji Konfigurasi Database MySQL (cPanel)
 if ($action === 'save_db_config' && $_SERVER['REQUEST_METHOD'] === 'POST') {
     $raw = file_get_contents('php://input');
     $payload = json_decode($raw, true);
@@ -85,31 +697,24 @@ if ($action === 'save_db_config' && $_SERVER['REQUEST_METHOD'] === 'POST') {
         exit;
     }
 
-    // Uji koneksi sebelum menyimpan
     try {
         $dsn = "mysql:host={$host};port={$port};dbname={$database};charset=utf8mb4";
         $testPdo = new PDO($dsn, $username, $password, [
             PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
             PDO::ATTR_TIMEOUT => 5
         ]);
-        
-        $testPdo->exec("CREATE TABLE IF NOT EXISTS `sispam_cloud_data` (
-            `id` VARCHAR(50) NOT NULL PRIMARY KEY,
-            `payload` LONGTEXT NOT NULL,
-            `updated_at` DATETIME NOT NULL
-        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;");
-
+        ensureRelationalTables($testPdo);
     } catch (Exception $e) {
         http_response_code(400);
         echo json_encode([
             'status' => 'error',
-            'message' => 'Gagal terhubung ke MySQL: ' . $e->getMessage() . '. Pastikan database & user sudah dibuat di cPanel MySQL Wizard dan diberi ALL PRIVILEGES.'
+            'message' => 'Gagal terhubung ke MySQL: ' . $e->getMessage() .
+                         '. Pastikan: (1) Nama database dan user benar di cPanel MySQL Databases, (2) User sudah ditambahkan ke Database dan DICENTANG "ALL PRIVILEGES".'
         ]);
         exit;
     }
 
-    // Tulis berkas db_config.php dengan aman
-    $phpCode = "<?php\n// Konfigurasi Database MySQL SISPAM Rumahweb\nreturn " . var_export([
+    $phpCode = "<?php\n// Konfigurasi Database MySQL SISPAM cPanel\nreturn " . var_export([
         'host' => $host,
         'port' => $port,
         'database' => $database,
@@ -119,10 +724,11 @@ if ($action === 'save_db_config' && $_SERVER['REQUEST_METHOD'] === 'POST') {
     ], true) . ";\n";
 
     @file_put_contents($dbConfigFile, $phpCode);
+    @chmod($dbConfigFile, 0644);
 
     echo json_encode([
         'status' => 'success',
-        'message' => "Koneksi berhasil! Database MySQL [{$database}] aktif dan terhubung.",
+        'message' => "Koneksi berhasil! Database MySQL [{$database}] aktif dan seluruh tabel telah disiapkan di phpMyAdmin.",
         'database' => $database,
         'user' => $username,
         'time' => date('Y-m-d H:i:s')
@@ -130,21 +736,38 @@ if ($action === 'save_db_config' && $_SERVER['REQUEST_METHOD'] === 'POST') {
     exit;
 }
 
-// 2. Cek Status Server Hosting & Database
+// 2. Status Server & Database
 if ($action === 'status') {
     $pdo = getMySQLConnection();
     $usingMySQL = ($pdo !== null);
 
     $hasData = false;
     $lastModified = null;
+    $tableCounts = [];
 
     if ($usingMySQL) {
         try {
+            ensureRelationalTables($pdo);
+            $uCount = $pdo->query("SELECT COUNT(*) FROM `users`")->fetchColumn();
+            $sCount = $pdo->query("SELECT COUNT(*) FROM `students`")->fetchColumn();
+            $tCount = $pdo->query("SELECT COUNT(*) FROM `teachers`")->fetchColumn();
+            $jCount = $pdo->query("SELECT COUNT(*) FROM `duty_journals`")->fetchColumn();
+
+            $tableCounts = [
+                'users' => intval($uCount),
+                'students' => intval($sCount),
+                'teachers' => intval($tCount),
+                'duty_journals' => intval($jCount)
+            ];
+
             $stmt = $pdo->query("SELECT updated_at FROM `sispam_cloud_data` WHERE id = 'main_database' LIMIT 1");
             $row = $stmt->fetch();
             if ($row) {
                 $hasData = true;
                 $lastModified = $row['updated_at'];
+            } else if ($uCount > 0) {
+                $hasData = true;
+                $lastModified = date('Y-m-d H:i:s');
             }
         } catch (Exception $e) {}
     } else {
@@ -156,40 +779,42 @@ if ($action === 'status') {
         'status' => 'online',
         'server' => 'sispam.hakito.my.id',
         'time' => date('Y-m-d H:i:s'),
-        'engine' => $usingMySQL ? 'MySQL Database (cPanel)' : 'JSON Server Storage',
+        'engine' => $usingMySQL ? 'MySQL Database (phpMyAdmin)' : 'JSON Server Storage (Standalone)',
         'has_database' => $hasData,
         'last_synced_at' => $lastModified,
-        'message' => $usingMySQL 
-            ? 'Terhubung resmi ke Database MySQL di cPanel Rumahweb.' 
-            : 'Berjalan dengan modul penyimpanan Cloud File JSON (Database MySQL belum dikonfigurasi).'
+        'table_counts' => $tableCounts,
+        'message' => $usingMySQL
+            ? 'Terhubung resmi ke Database MySQL di cPanel / phpMyAdmin.'
+            : 'Belum terhubung ke MySQL. Silakan masukkan kredensial database di menu Manajemen Sistem.'
     ]);
     exit;
 }
 
-// 3. PULL: Mengambil Data Terbaru dari Server ke Laptop / HP
+// 3. PULL: Tarik Data Terbaru dari MySQL / Server ke Aplikasi
 if ($action === 'pull' || ($_SERVER['REQUEST_METHOD'] === 'GET' && empty($action))) {
     $pdo = getMySQLConnection();
 
-    // Mode A: Tarik dari MySQL
     if ($pdo !== null) {
         try {
-            $stmt = $pdo->prepare("SELECT payload, updated_at FROM `sispam_cloud_data` WHERE id = 'main_database' LIMIT 1");
-            $stmt->execute();
-            $row = $stmt->fetch();
-            if ($row && !empty($row['payload'])) {
-                $decoded = json_decode($row['payload'], true);
+            $data = pullFromRelationalTables($pdo);
+            if (!empty($data) && (!empty($data['users']) || !empty($data['school_profile']) || !empty($data['students']))) {
+                $stmt = $pdo->query("SELECT updated_at FROM `sispam_cloud_data` WHERE id = 'main_database' LIMIT 1");
+                $r = $stmt->fetch();
+                $serverTime = $r ? $r['updated_at'] : date('Y-m-d H:i:s');
+
                 echo json_encode([
                     'status' => 'success',
                     'engine' => 'mysql',
-                    'server_time' => $row['updated_at'],
-                    'data' => $decoded
+                    'server_time' => $serverTime,
+                    'data' => $data
                 ]);
                 exit;
             }
-        } catch (Exception $e) {}
+        } catch (Exception $e) {
+            error_log('PULL MySQL Error: ' . $e->getMessage());
+        }
     }
 
-    // Mode B: Fallback Tarik dari File JSON
     if (file_exists($jsonDbFile)) {
         $content = @file_get_contents($jsonDbFile);
         if (!empty($content)) {
@@ -206,13 +831,13 @@ if ($action === 'pull' || ($_SERVER['REQUEST_METHOD'] === 'GET' && empty($action
 
     echo json_encode([
         'status' => 'empty',
-        'message' => 'Basis data di server masih kosong. Akan otomatis terisi saat perangkat pertama menyimpan data.',
+        'message' => 'Basis data di server masih kosong.',
         'data' => null
     ]);
     exit;
 }
 
-// 4. PUSH: Mengirim Perubahan Data dari Laptop / HP ke Server Hosting
+// 4. PUSH: Simpan & Sinkronisasi Perubahan Data ke MySQL (phpMyAdmin)
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $rawInput = file_get_contents('php://input');
     if (empty($rawInput)) {
@@ -229,41 +854,69 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
 
     $dataToSave = isset($payload['data']) ? $payload['data'] : $payload;
-    if (is_array($dataToSave)) {
-        $dataToSave['server_synced_at'] = date('Y-m-d H:i:s');
-    }
-    $encoded = json_encode($dataToSave, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE);
     $now = date('Y-m-d H:i:s');
 
+    if (is_array($dataToSave)) {
+        $dataToSave['server_synced_at'] = $now;
+    }
+
+    $encoded = json_encode($dataToSave, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE);
     $pdo = getMySQLConnection();
     $savedToMySQL = false;
+    $mysqlError = null;
 
-    // Simpan ke MySQL jika aktif
     if ($pdo !== null) {
         try {
-            $stmt = $pdo->prepare("INSERT INTO `sispam_cloud_data` (`id`, `payload`, `updated_at`) 
+            ensureRelationalTables($pdo);
+
+            // Transaksi atomic PDO
+            $pdo->beginTransaction();
+
+            // 1. Sinkronkan ke tabel-tabel relasional
+            syncPayloadToRelationalTables($pdo, $dataToSave);
+
+            // 2. Simpan payload master lengkap ke sispam_cloud_data
+            $stmt = $pdo->prepare("INSERT INTO `sispam_cloud_data` (`id`, `payload`, `updated_at`)
                 VALUES ('main_database', :payload, :updated_at)
                 ON DUPLICATE KEY UPDATE `payload` = VALUES(`payload`), `updated_at` = VALUES(`updated_at`)");
             $stmt->execute([
                 ':payload' => $encoded,
                 ':updated_at' => $now
             ]);
+
+            $pdo->commit();
             $savedToMySQL = true;
+
         } catch (Exception $e) {
+            if ($pdo->inTransaction()) {
+                try { $pdo->rollBack(); } catch (Exception $ignored) {}
+            }
+            error_log('PUSH MySQL Error: ' . $e->getMessage());
             $savedToMySQL = false;
+            $mysqlError = $e->getMessage();
         }
     }
 
-    // Selalu simpan juga ke file JSON sebagai cadangan ganda (dual-redundancy)
+    // Selalu simpan juga ke file JSON sebagai cadangan ganda (Dual-Redundancy)
     @file_put_contents($jsonDbFile, $encoded, LOCK_EX);
+    @chmod($jsonDbFile, 0644);
+
+    $httpCode = 200;
+    if ($pdo !== null && !$savedToMySQL) {
+        $httpCode = 500;
+    }
+    http_response_code($httpCode);
 
     echo json_encode([
-        'status' => 'success',
-        'engine' => $savedToMySQL ? 'MySQL Database (cPanel)' : 'JSON Server Storage',
-        'message' => 'Data berhasil disinkronkan ke server sispam.hakito.my.id',
-        'synced_at' => $now
+        'status' => ($savedToMySQL || $pdo === null) ? 'success' : 'partial_error',
+        'engine' => $savedToMySQL ? 'MySQL Database (phpMyAdmin)' : ($pdo !== null ? 'JSON Server Storage (MySQL GAGAL)' : 'JSON Server Storage (Standalone)'),
+        'message' => $savedToMySQL
+            ? 'Data berhasil disimpan dan disinkronkan ke database MySQL di phpMyAdmin!'
+            : ($pdo !== null ? ('MySQL gagal: ' . ($mysqlError ?: 'unknown error') . '. Data hanya tersimpan di file JSON.') : 'Data berhasil disimpan ke penyimpanan server.'),
+        'synced_at' => $now,
+        'mysql_error' => $savedToMySQL ? null : $mysqlError
     ]);
     exit;
 }
 
-echo json_encode(['status' => 'ready', 'message' => 'SISPAM Cloud Sync Engine']);
+echo json_encode(['status' => 'ready', 'message' => 'SISPAM MySQL API Engine']);

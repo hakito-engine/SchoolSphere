@@ -4,7 +4,7 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>SISPAM - Sistem Integrasi Sekolah, Pembelajaran, & Administrasi</title>
-    <meta name="description" content="SISPAM - Sistem Integrasi Sekolah, Pembelajaran, & Administrasi by Hakito Engine" />
+    <meta name="description" content="SISPAM - Sistem Integrasi Sekolah, Pembelajaran, & Administrasi by Hakito Tech" />
     <meta property="og:title" content="SISPAM - Sistem Integrasi Sekolah, Pembelajaran, & Administrasi" />
     <meta property="og:description" content="Sistem Integrasi Sekolah, Pembelajaran, & Administrasi" />
     <meta property="og:type" content="website" />
@@ -14,7 +14,7 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
     <script type="text/javascript">
-      // Decode SPA redirect from 404.html if present on GitHub Pages
+      // Decode SPA redirect from 404.html if present
       (function(l) {
         if (l.search[1] === '/' ) {
           var decoded = l.search.slice(1).split('&').map(function(s) { 
@@ -31,13 +31,20 @@
     <div id="root">
       <div id="app-preloader" style="min-height: 100vh; display: flex; flex-direction: column; align-items: center; justify-content: center; background: #0f172a; color: #f8fafc; font-family: system-ui, -apple-system, sans-serif; text-align: center; padding: 24px;">
         <div style="width: 56px; height: 56px; border: 4px solid rgba(99, 102, 241, 0.2); border-top-color: #6366f1; border-radius: 50%; animation: spin 0.9s linear infinite; margin-bottom: 20px;"></div>
-        <h2 style="font-size: 1.25rem; font-weight: 700; margin: 0 0 8px 0; letter-spacing: -0.02em;">SISPAM PRO</h2>
+        <h2 style="font-size: 1.25rem; font-weight: 800; margin: 0 0 8px 0; letter-spacing: -0.02em; color: #6366f1;">SISPAM</h2>
         <p style="font-size: 0.85rem; color: #94a3b8; margin: 0 0 16px 0; max-width: 380px;">Sistem Integrasi Sekolah, Pembelajaran, & Administrasi</p>
         
-        <div id="preloader-hint" style="display: none; max-width: 440px; background: rgba(30, 41, 59, 0.8); border: 1px solid rgba(71, 85, 105, 0.5); border-radius: 12px; padding: 16px; margin-top: 12px; font-size: 0.75rem; text-align: left; line-height: 1.5; color: #cbd5e1;">
-          <div style="font-weight: 700; color: #f59e0b; margin-bottom: 6px;">💡 Tips Deployment GitHub Pages:</div>
-          <p style="margin: 0 0 6px 0;">Jika tampilan tidak berpindah: Pastikan proses build di GitHub Actions telah selesai dijalankan (centang hijau ✅ di tab <b>Actions</b>).</p>
-          <button onclick="window.location.reload()" style="background: #4f46e5; color: #fff; border: none; padding: 6px 14px; border-radius: 6px; font-size: 0.75rem; font-weight: 600; cursor: pointer; margin-top: 6px;">Muat Ulang Halaman</button>
+        <div id="preloader-hint" style="display: none; max-width: 440px; background: rgba(30, 41, 59, 0.95); border: 1px solid rgba(99, 102, 241, 0.4); border-radius: 14px; padding: 18px; margin-top: 14px; font-size: 0.8rem; text-align: center; line-height: 1.5; color: #e2e8f0; box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.5);">
+          <div style="font-weight: 700; color: #818cf8; margin-bottom: 6px; font-size: 0.95rem; display: flex; align-items: center; justify-content: center; gap: 6px;">
+            <span>🔐</span> Menuju Halaman Login
+          </div>
+          <p style="margin: 0 0 14px 0; color: #94a3b8; font-size: 0.8rem;">
+            Sesi akun Anda belum aktif atau sedang memuat modul sistem. Silakan masuk melalui halaman login untuk mengakses Dashboard & Sistem SISPAM.
+          </p>
+          <div style="display: flex; gap: 8px; justify-content: center; flex-wrap: wrap;">
+            <a href="./login" style="display: inline-block; background: #4f46e5; color: #ffffff; text-decoration: none; padding: 8px 18px; border-radius: 8px; font-size: 0.8rem; font-weight: 600; cursor: pointer; transition: all 0.2s;">Buka Halaman Login</a>
+            <button onclick="window.location.reload()" style="background: rgba(51, 65, 85, 0.8); color: #cbd5e1; border: 1px solid rgba(100, 116, 139, 0.5); padding: 8px 14px; border-radius: 8px; font-size: 0.8rem; font-weight: 500; cursor: pointer;">Muat Ulang</button>
+          </div>
         </div>
       </div>
       <style>
@@ -47,7 +54,7 @@
         setTimeout(function() {
           var hint = document.getElementById('preloader-hint');
           if (hint) hint.style.display = 'block';
-        }, 5000);
+        }, 3500);
       </script>
     </div>
     <script type="module" src="./src/main.tsx"></script>

@@ -42,7 +42,7 @@ export const CounselingView: React.FC = () => {
 
   // Early alert students: Alpa >= 3 or GPA < 75
   const atRiskStudents = students.filter(
-    (s) => s.attendance.alpa >= 3 || s.gpa < 75
+    (s) => (s.attendance?.alpa ?? 0) >= 3 || (s.gpa ?? 100) < 75
   );
 
   // List of registered BK teachers dynamically derived from Admin settings
@@ -136,9 +136,9 @@ export const CounselingView: React.FC = () => {
       counselorId: currentUser.id,
       counselorName: currentUser.name || 'Dewi Lestari, S.Psi., M.Pd.',
       date: new Date().toISOString().substring(0, 10),
-      category: student && student.attendance.alpa >= 3 ? 'Kedisiplinan' : 'Akademik',
+      category: student && (student.attendance?.alpa ?? 0) >= 3 ? 'Kedisiplinan' : 'Akademik',
       issueSummary: student
-        ? `Tercatat akumulasi alpa ${student.attendance.alpa} hari dan nilai rata-rata ${student.gpa}.`
+        ? `Tercatat akumulasi alpa ${student.attendance?.alpa ?? 0} hari dan nilai rata-rata ${student.gpa ?? 0}.`
         : '',
       followUpPlan: 'Sesi konseling individual dan koordinasi wali kelas.',
       status: 'Penjadwalan',
@@ -441,9 +441,9 @@ export const CounselingView: React.FC = () => {
                     {std.name} ({std.className})
                   </p>
                   <div className="flex items-center gap-2 mt-1 text-[11px] text-slate-500 font-mono">
-                    <span className="text-rose-600 font-bold">Alpa: {std.attendance.alpa} hari</span>
+                    <span className="text-rose-600 font-bold">Alpa: {std.attendance?.alpa ?? 0} hari</span>
                     <span>·</span>
-                    <span>Rata-rata: {std.gpa}</span>
+                    <span>Rata-rata: {std.gpa ?? 0}</span>
                     <span>·</span>
                     <span>Ortu: {std.parentName}</span>
                   </div>

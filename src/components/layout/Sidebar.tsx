@@ -25,6 +25,8 @@ import {
   Award,
   ClipboardCheck,
   Briefcase,
+  Mail,
+  Code2,
 } from 'lucide-react';
 
 interface SidebarProps {
@@ -72,6 +74,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
         { id: 'modules', label: 'Modul Pembelajaran', icon: BookOpen, module: 'modules' },
         { id: 'attendance', label: 'Presensi & Kehadiran', icon: CalendarCheck, module: 'attendance' },
         { id: 'piket', label: 'Piket', icon: ClipboardCheck, module: 'piket' },
+        { id: 'rekap_ptk', label: 'Rekap Presensi PTK', icon: UserCheck, module: 'rekap_ptk' },
         { id: 'journals', label: 'Jurnal Mengajar', icon: FileSpreadsheet, module: 'journals' },
         { id: 'assignments', label: 'Tugas & Penilaian', icon: GraduationCap, module: 'assignments' },
         { id: 'homeroom_reports', label: 'Rapor & Leger Wali Kelas', icon: Award, module: 'homeroom_reports' },
@@ -92,6 +95,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
       title: 'Layanan & Bimbingan',
       items: [
         { id: 'counseling', label: 'Bimbingan Konseling (BK)', icon: HeartHandshake, module: 'counseling' },
+        { id: 'letters', label: 'Surat Panggilan Orang Tua', icon: Mail, module: 'letters' },
         { id: 'parent_portal', label: 'Portal Orang Tua & Komunikasi', icon: UserCheck, module: 'parent_portal' },
         { id: 'analytics', label: 'Smart Analytics & Alert', icon: LineChart, module: 'analytics' },
         { id: 'announcements', label: 'Pengumuman Sekolah', icon: Megaphone, module: 'announcements' },
@@ -103,6 +107,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
         { id: 'users', label: 'Manajemen Pengguna', icon: ShieldCheck, module: 'users' },
         { id: 'settings', label: 'Pengaturan Sekolah', icon: Settings, module: 'settings' },
         { id: 'system_management', label: 'Manajemen Sistem & Audit', icon: Database, module: 'system_management' },
+        { id: 'developer_identity', label: 'Identitas Pengembang', icon: Code2, module: 'developer_identity' },
       ],
     },
   ];
@@ -133,11 +138,11 @@ export const Sidebar: React.FC<SidebarProps> = ({
             </div>
             {isExpanded && (
               <div className="leading-tight truncate">
-                <p className="text-xs font-bold text-slate-900 dark:text-white tracking-wide truncate">
+                <p className="text-sm font-black text-indigo-600 dark:text-indigo-400 tracking-wide truncate">
                   SISPAM
                 </p>
-                <p className="text-[10px] text-indigo-600 dark:text-indigo-400 font-semibold tracking-widest uppercase">
-                  ENTERPRISE PRO
+                <p className="text-[10px] text-slate-500 dark:text-slate-400 font-semibold tracking-widest uppercase">
+                  ENTERPRISE EDITION
                 </p>
               </div>
             )}
@@ -228,8 +233,8 @@ export const Sidebar: React.FC<SidebarProps> = ({
         {/* Footer info */}
         {isExpanded && (
           <div className="p-3 border-t border-slate-200 dark:border-slate-800 text-[11px] text-slate-400 text-center">
-            <p className="font-semibold text-slate-600 dark:text-slate-300">SISPAM PRO</p>
-            <p className="text-[10px]">Hakito Engine v2.4</p>
+            <p className="font-bold text-indigo-600 dark:text-indigo-400">SISPAM</p>
+            <p className="text-[10px]">Hakito Tech v2.4</p>
           </div>
         )}
       </aside>

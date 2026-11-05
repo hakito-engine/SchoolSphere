@@ -859,12 +859,12 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ onNavigate }) => {
             const homeroomClass = classes.find((c) => c.id === currentUser.classId) || classes[0];
             const totalStudentsCount = homeroomStudents.length;
             const atRiskStudents = homeroomStudents.filter(
-              (s) => (s.attendance?.alpa || 0) >= 3 || s.gpa < 75
+              (s) => (s.attendance?.alpa ?? 0) >= 3 || (s.gpa ?? 100) < 75
             );
             const atRiskCount = atRiskStudents.length;
             const activePresentCount = Math.max(0, totalStudentsCount - atRiskCount);
             const avgGpa = totalStudentsCount > 0
-              ? (homeroomStudents.reduce((acc, s) => acc + s.gpa, 0) / totalStudentsCount).toFixed(1)
+              ? (homeroomStudents.reduce((acc, s) => acc + (s.gpa ?? 80), 0) / totalStudentsCount).toFixed(1)
               : '85.4';
 
             return (
@@ -914,7 +914,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ onNavigate }) => {
                       {atRiskCount} Peserta Didik
                     </p>
                     <p className="text-[11px] text-slate-500 mt-0.5">
-                      {atRiskStudents[0]?.name ? `${atRiskStudents[0].name} (Alpa ${atRiskStudents[0].attendance?.alpa} hari)` : 'Semua peserta didik aman'}
+                      {atRiskStudents[0]?.name ? `${atRiskStudents[0].name} (Alpa ${atRiskStudents[0].attendance?.alpa ?? 0} hari)` : 'Semua peserta didik aman'}
                     </p>
                   </div>
                   <div className="p-4 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800">

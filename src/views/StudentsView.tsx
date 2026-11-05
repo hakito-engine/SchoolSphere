@@ -43,6 +43,7 @@ export const StudentsView: React.FC = () => {
   // Form Modal State
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingStudent, setEditingStudent] = useState<Student | null>(null);
+  const [studentToDelete, setStudentToDelete] = useState<Student | null>(null);
   const [formData, setFormData] = useState<Partial<Student>>({
     name: '',
     nisn: '',
@@ -254,15 +255,19 @@ export const StudentsView: React.FC = () => {
     setIsModalOpen(false);
   };
 
-  const handleDelete = (id: string) => {
-    if (confirm('Apakah Anda yakin ingin menghapus data peserta didik ini?')) {
-      DataService.deleteStudent(id, {
-        id: currentUser.id,
-        name: currentUser.name,
-        role: currentUser.role,
-      });
-      setStudents(DataService.getStudents());
-    }
+  const handleDelete = (std: Student) => {
+    setStudentToDelete(std);
+  };
+
+  const handleConfirmDelete = () => {
+    if (!studentToDelete) return;
+    DataService.deleteStudent(studentToDelete.id, {
+      id: currentUser.id,
+      name: currentUser.name,
+      role: currentUser.role,
+    });
+    setStudents(DataService.getStudents());
+    setStudentToDelete(null);
   };
 
   const handlePrintCertificate = (student: Student) => {
@@ -665,14 +670,14 @@ export const StudentsView: React.FC = () => {
                     </td>
                     <td className="py-3 px-4 text-center">
                       <div className="inline-flex items-center gap-1 font-mono text-[11px]">
-                        <span className="text-emerald-600 font-bold" title="Hadir">{std.attendance.hadir}H</span>
+                        <span className="text-emerald-600 font-bold" title="Hadir">{std.attendance?.hadir ?? 0}H</span>
                         <span className="text-slate-300">/</span>
-                        <span className="text-blue-600" title="Sakit">{std.attendance.sakit}S</span>
+                        <span className="text-blue-600" title="Sakit">{std.attendance?.sakit ?? 0}S</span>
                         <span className="text-slate-300">/</span>
-                        <span className="text-amber-600" title="Izin">{std.attendance.izin}I</span>
+                        <span className="text-amber-600" title="Izin">{std.attendance?.izin ?? 0}I</span>
                         <span className="text-slate-300">/</span>
-                        <span className={`font-bold ${std.attendance.alpa > 0 ? 'text-rose-600' : 'text-slate-400'}`} title="Alpa">
-                          {std.attendance.alpa}A
+                        <span className={`font-bold ${(std.attendance?.alpa ?? 0) > 0 ? 'text-rose-600' : 'text-slate-400'}`} title="Alpa">
+                          {std.attendance?.alpa ?? 0}A
                         </span>
                       </div>
                     </td>
@@ -714,7 +719,7 @@ export const StudentsView: React.FC = () => {
                         )}
                         {['super_admin', 'operator'].includes(currentUser.role) && (
                           <button
-                            onClick={() => handleDelete(std.id)}
+                            onClick={() => handleDelete(std)}
                             className="p-1.5 text-slate-600 dark:text-slate-300 hover:text-rose-600 hover:bg-slate-100 dark:hover:bg-slate-800 rounded transition-colors cursor-pointer"
                             title="Hapus Siswa"
                           >
@@ -1030,16 +1035,25 @@ export const StudentsView: React.FC = () => {
         />
       )}
 
-      {/* MODAL 4: TAMBAH / EDIT SISWA (DENGAN UPLOAD FOTO & SMART PARENT AUTO-SUGGESTION) */}
+      {/* MODAL 4: TAMBAH / EDIT SISWA (DENGAN SCROLLING & UPLOAD FOTO & SMART PARENT AUTO-SUGGESTION) */}
       {isModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 overflow-y-auto">
-          <div className="bg-white dark:bg-slate-900 rounded-xl max-w-xl w-full p-6 border border-slate-200 dark:border-slate-800 shadow-xl my-8">
-            <h3 className="text-sm font-bold text-slate-900 dark:text-white mb-4 flex items-center gap-2">
-              <Users className="w-4 h-4 text-indigo-600" />
-              {editingStudent ? 'Edit Data Peserta Didik' : 'Tambah Peserta Didik Baru'}
-            </h3>
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs p-4 overflow-y-auto">
+          <div className="bg-white dark:bg-slate-900 rounded-2xl max-w-xl w-full max-h-[90vh] flex flex-col p-6 border border-slate-200 dark:border-slate-800 shadow-2xl my-auto">
+            <div className="flex items-center justify-between pb-3 mb-3 border-b border-slate-100 dark:border-slate-800 shrink-0">
+              <h3 className="text-sm font-bold text-slate-900 dark:text-white flex items-center gap-2">
+                <Users className="w-4 h-4 text-indigo-600" />
+                <span>{editingStudent ? 'Edit Data Peserta Didik' : 'Tambah Peserta Didik Baru'}</span>
+              </h3>
+              <button
+                type="button"
+                onClick={() => setIsModalOpen(false)}
+                className="p-1 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 rounded-lg cursor-pointer"
+              >
+                ✕
+              </button>
+            </div>
 
-            <form onSubmit={handleSave} className="space-y-3.5 text-xs">
+            <form onSubmit={handleSave} className="space-y-3.5 text-xs overflow-y-auto pr-2 flex-1">
               {/* Foto Siswa Upload */}
               <div className="p-3 bg-slate-50 dark:bg-slate-800/60 rounded-xl border border-slate-200 dark:border-slate-700 flex items-center gap-4">
                 <div className="w-16 h-20 rounded-lg bg-slate-200 dark:bg-slate-700 flex items-center justify-center overflow-hidden border border-slate-300 dark:border-slate-600 shrink-0">
@@ -1266,7 +1280,7 @@ export const StudentsView: React.FC = () => {
                 </div>
               </div>
 
-              <div className="flex items-center justify-end gap-2 pt-3 border-t border-slate-100 dark:border-slate-800">
+              <div className="flex items-center justify-end gap-2 pt-3 border-t border-slate-100 dark:border-slate-800 shrink-0">
                 <button
                   type="button"
                   onClick={() => setIsModalOpen(false)}
@@ -1282,6 +1296,53 @@ export const StudentsView: React.FC = () => {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL KONFIRMASI HAPUS SISWA (BEBAS DARI BUG CONFIRM IFRAME) */}
+      {studentToDelete && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs p-4">
+          <div className="bg-white dark:bg-slate-900 rounded-2xl max-w-md w-full p-6 border border-slate-200 dark:border-slate-800 shadow-2xl space-y-4">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-full bg-rose-100 dark:bg-rose-950/60 text-rose-600 flex items-center justify-center shrink-0">
+                <Trash2 className="w-5 h-5" />
+              </div>
+              <div>
+                <h3 className="text-sm font-bold text-slate-900 dark:text-white">
+                  Konfirmasi Hapus Data Siswa
+                </h3>
+                <p className="text-xs text-slate-500">
+                  Tindakan ini tidak dapat dibatalkan.
+                </p>
+              </div>
+            </div>
+
+            <div className="p-3 bg-rose-50 dark:bg-rose-950/40 rounded-xl border border-rose-200 dark:border-rose-900/60 text-xs text-rose-900 dark:text-rose-200 space-y-1">
+              <p>Apakah Anda yakin ingin menghapus data peserta didik berikut?</p>
+              <p className="font-bold text-slate-900 dark:text-white">{studentToDelete.name} ({studentToDelete.className})</p>
+              <p className="font-mono text-[11px] text-rose-700 dark:text-rose-300">NISN: {studentToDelete.nisn} · NIS: {studentToDelete.nis}</p>
+              <p className="text-[10px] text-slate-500 pt-1">
+                * Menghapus siswa ini juga akan otomatis menghapus akun login siswa dan orang tua dari sistem manajemen pengguna.
+              </p>
+            </div>
+
+            <div className="flex items-center justify-end gap-2 pt-2">
+              <button
+                type="button"
+                onClick={() => setStudentToDelete(null)}
+                className="px-4 py-2 text-xs rounded-lg text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 font-medium cursor-pointer"
+              >
+                Batal
+              </button>
+              <button
+                type="button"
+                onClick={handleConfirmDelete}
+                className="px-4 py-2 text-xs font-bold text-white bg-rose-600 hover:bg-rose-700 rounded-lg shadow-sm transition-colors cursor-pointer"
+              >
+                Ya, Hapus Siswa
+              </button>
+            </div>
           </div>
         </div>
       )}

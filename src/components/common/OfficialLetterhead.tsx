@@ -5,12 +5,14 @@ interface OfficialLetterheadProps {
   profile: SchoolProfile;
   documentTitle?: string;
   documentNumber?: string;
+  showDocumentNumber?: boolean;
 }
 
 export const OfficialLetterhead: React.FC<OfficialLetterheadProps> = ({
   profile,
   documentTitle,
   documentNumber,
+  showDocumentNumber = true,
 }) => {
   return (
     <div className="w-full text-slate-900 mb-6">
@@ -77,7 +79,7 @@ export const OfficialLetterhead: React.FC<OfficialLetterheadProps> = ({
           <h2 className="text-base font-bold underline uppercase tracking-wide">
             {documentTitle}
           </h2>
-          {documentNumber && (
+          {showDocumentNumber && documentNumber && (
             <p className="text-xs font-mono text-slate-700 mt-1">
               Nomor: {documentNumber}
             </p>

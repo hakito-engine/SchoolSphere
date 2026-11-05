@@ -115,8 +115,8 @@ export const LoginView: React.FC = () => {
             />
           </div>
 
-          <h1 className="text-3xl font-black tracking-tight text-slate-900 dark:text-white">
-            SISPAM <span className="text-indigo-600 dark:text-indigo-400">PRO</span>
+          <h1 className="text-3xl font-black tracking-tight text-indigo-600 dark:text-indigo-400">
+            SISPAM
           </h1>
           <p className="text-xs font-semibold text-indigo-700 dark:text-indigo-300 tracking-wide">
             Sistem Integrasi Sekolah, Pembelajaran, & Administrasi

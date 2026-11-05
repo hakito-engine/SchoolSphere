@@ -38,9 +38,11 @@ export const UsersView: React.FC = () => {
       setUsers(DataService.getUsers());
     };
     window.addEventListener('schoolsphere_user_updated', handleSync);
+    window.addEventListener('schoolsphere_cloud_synced', handleSync);
     window.addEventListener('storage', handleSync);
     return () => {
       window.removeEventListener('schoolsphere_user_updated', handleSync);
+      window.removeEventListener('schoolsphere_cloud_synced', handleSync);
       window.removeEventListener('storage', handleSync);
     };
   }, []);

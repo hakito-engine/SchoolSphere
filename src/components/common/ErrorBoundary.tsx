@@ -118,7 +118,7 @@ export class ErrorBoundary extends Component<Props, State> {
             </div>
 
             <div className="mt-6 pt-4 border-t border-slate-700/60 text-[11px] text-slate-400 text-center">
-              SISPAM PRO · Sistem Pemulihan Otomatis Hakito Engine
+              <span className="font-bold text-indigo-400">SISPAM</span> · Sistem Pemulihan Otomatis Hakito Tech
             </div>
           </div>
         </div>

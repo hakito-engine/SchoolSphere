@@ -1,8 +1,9 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import { createPortal } from 'react-dom';
-import { Printer, X } from 'lucide-react';
+import { Printer, X, Download } from 'lucide-react';
 import { OfficialLetterhead } from './OfficialLetterhead';
 import { DataService } from '../../services/dataService';
+import { exportElementToPdf } from '../../utils/pdfExport';
 
 interface PrintModalProps {
   isOpen: boolean;
@@ -44,6 +45,22 @@ export const PrintModal: React.FC<PrintModalProps> = ({
   const [showLetterNumber, setShowLetterNumber] = React.useState<boolean>(
     profile.showOfficialLetterNumber !== false
   );
+  const printCanvasRef = useRef<HTMLDivElement>(null);
+  const [isExportingPdf, setIsExportingPdf] = useState(false);
+
+  const handleDownloadPdf = async () => {
+    if (!printCanvasRef.current) return;
+    setIsExportingPdf(true);
+    try {
+      const cleanDocTitle = (documentTitle || title || 'Dokumen_Resmi')
+        .replace(/[^a-zA-Z0-9]/g, '_')
+        .replace(/_+/g, '_');
+      await exportElementToPdf(printCanvasRef.current, `${cleanDocTitle}.pdf`);
+    } finally {
+      setIsExportingPdf(false);
+    }
+  };
+
   useEffect(() => {
     if (!isOpen) return;
     document.body.classList.add('print-modal-open');
@@ -177,7 +194,7 @@ export const PrintModal: React.FC<PrintModalProps> = ({
             </span>
           </div>
           <div className="flex items-center gap-3">
-            {/* Toggle Aktifkan/Nonaktifkan Nomor Surat (Dikelola oleh Admin / Pengguna) */}
+            {/* Toggle Aktifkan/Nonaktifkan Nomor Surat (Request 6: Cantumkan Nomor Surat) */}
             {!hideDocumentNumber && (
               <label className="flex items-center gap-1.5 text-xs text-slate-700 dark:text-slate-300 font-medium cursor-pointer bg-white dark:bg-slate-800 px-2.5 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 select-none hover:bg-slate-50">
                 <input
@@ -186,9 +203,20 @@ export const PrintModal: React.FC<PrintModalProps> = ({
                   onChange={(e) => setShowLetterNumber(e.target.checked)}
                   className="w-3.5 h-3.5 rounded text-indigo-600 focus:ring-indigo-500 cursor-pointer"
                 />
-                <span>Tampilkan Nomor Surat</span>
+                <span>Cantumkan Nomor Surat</span>
               </label>
             )}
+
+            <button
+              type="button"
+              disabled={isExportingPdf}
+              onClick={handleDownloadPdf}
+              className="flex items-center gap-1.5 px-3.5 py-2 text-xs font-semibold text-indigo-700 dark:text-indigo-300 bg-indigo-50 dark:bg-indigo-950/70 hover:bg-indigo-100 dark:hover:bg-indigo-900/60 rounded-lg border border-indigo-200 dark:border-indigo-800 transition-colors cursor-pointer disabled:opacity-50"
+              title="Download salinan dokumen resmi format .PDF"
+            >
+              <Download className="w-4 h-4" />
+              <span>{isExportingPdf ? 'Membuat PDF...' : 'Download .Pdf'}</span>
+            </button>
 
             <button
               onClick={handlePrint}
@@ -210,6 +238,7 @@ export const PrintModal: React.FC<PrintModalProps> = ({
         {/* Printable Paper Canvas */}
         <div className="print-modal-canvas-wrap flex-1 overflow-y-auto p-6 md:p-10 bg-slate-100 dark:bg-slate-950 flex justify-center">
           <div
+            ref={printCanvasRef}
             className="print-page official-paper bg-white text-slate-900 p-8 md:p-12 shadow-md w-full max-w-[215mm] min-h-[330mm] text-xs leading-relaxed"
             style={{
               WebkitPrintColorAdjust: 'exact',
@@ -221,6 +250,7 @@ export const PrintModal: React.FC<PrintModalProps> = ({
               profile={profile}
               documentTitle={documentTitle}
               documentNumber={finalDocumentNumber}
+              showDocumentNumber={showLetterNumber}
             />
 
             {/* Document Content */}

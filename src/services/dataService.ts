@@ -30,6 +30,8 @@ import {
   DutySchedule,
   StaffMember,
   DutyJournal,
+  DailyWorkingHour,
+  ParentNoticeLetter,
 } from '../types';
 import {
   INITIAL_SCHOOL_PROFILE,
@@ -60,6 +62,7 @@ import {
   INITIAL_STAFF,
   INITIAL_DUTY_SCHEDULES,
   INITIAL_DUTY_JOURNALS,
+  INITIAL_WORKING_HOURS,
 } from '../data/mockData';
 
 const STORAGE_PREFIX = 'schoolsphere_pro_';
@@ -77,6 +80,9 @@ function getStoredItem<T>(key: string, fallback: T): T {
 function setStoredItem<T>(key: string, value: T): void {
   try {
     localStorage.setItem(STORAGE_PREFIX + key, JSON.stringify(value));
+    if (key !== 'last_cloud_sync' && key !== 'last_local_update') {
+      localStorage.setItem(STORAGE_PREFIX + 'last_local_update', new Date().toISOString());
+    }
     if (key !== 'last_cloud_sync' && typeof window !== 'undefined' && DataService && typeof DataService.triggerAutoSyncToServer === 'function') {
       DataService.triggerAutoSyncToServer();
     }
@@ -86,6 +92,9 @@ function setStoredItem<T>(key: string, value: T): void {
 }
 
 export class DataService {
+  public static isCloudSyncReady = false;
+  public static isSyncing = false;
+
   // --- Audit Log ---
   static getAuditLogs(): AuditLog[] {
     return getStoredItem<AuditLog[]>('audit_logs', INITIAL_AUDIT_LOGS);
@@ -444,6 +453,7 @@ export class DataService {
       this.logAction(currentUser, 'ADD_USER', 'Manajemen Pengguna', `Menambahkan akun pengguna baru: ${user.name}`);
     }
     setStoredItem('users', updated);
+    this.pushToServer().catch(() => {});
     if (typeof window !== 'undefined') {
       window.dispatchEvent(new CustomEvent('schoolsphere_user_updated', { detail: { action: 'save', user } }));
     }
@@ -456,6 +466,12 @@ export class DataService {
     if (idx < 0) return false;
     users[idx].password = newPassword;
     setStoredItem('users', [...users]);
+    // Push segera ke database MySQL tanpa jeda debounce agar langsung sinkron ke Admin
+    this.pushToServer().catch(() => {});
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('schoolsphere_user_updated', { detail: { action: 'password', userId } }));
+      window.dispatchEvent(new CustomEvent('schoolsphere_cloud_synced', { detail: { action: 'password', userId } }));
+    }
     return true;
   }
 
@@ -474,6 +490,11 @@ export class DataService {
       users[idx].password = newPassword.trim();
     }
     setStoredItem('users', [...users]);
+    this.pushToServer().catch(() => {});
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('schoolsphere_user_updated', { detail: { action: 'credentials', userId } }));
+      window.dispatchEvent(new CustomEvent('schoolsphere_cloud_synced', { detail: { action: 'credentials', userId } }));
+    }
     this.logAction(
       currentUser,
       'UPDATE_USER_CREDENTIALS',
@@ -544,6 +565,9 @@ export class DataService {
       `Super Admin memperbarui kredensial akun: Nama: ${target.name}, Username: @${cleanU}, WhatsApp: ${finalWa || '-'}`
     );
 
+    // Segera push ke database MySQL di phpMyAdmin tanpa jeda
+    this.pushToServer().catch(() => {});
+
     return {
       success: true,
       message: `Kredensial Super Admin berhasil diperbarui! Username: @${cleanU}, WhatsApp: ${finalWa || '-'}.`,
@@ -571,6 +595,7 @@ export class DataService {
       'Manajemen Pengguna',
       `Super Admin menghapus pengguna: ${target.name} (${target.username})`
     );
+    this.pushToServer().catch(() => {});
     if (typeof window !== 'undefined') {
       window.dispatchEvent(new CustomEvent('schoolsphere_user_updated', { detail: { action: 'delete', id } }));
     }
@@ -652,7 +677,23 @@ export class DataService {
 
   // --- Students ---
   static getStudents(): Student[] {
-    return getStoredItem<Student[]>('students', INITIAL_STUDENTS);
+    const list = getStoredItem<Student[]>('students', INITIAL_STUDENTS);
+    return list.map((s) => ({
+      ...s,
+      attendance: s.attendance || {
+        hadir: 52,
+        sakit: 1,
+        izin: 1,
+        alpa: 0,
+        terlambat: 0,
+      },
+      gpa: typeof s.gpa === 'number' ? s.gpa : 85,
+      parentId: s.parentId || `prnt-${s.id}`,
+      parentName: s.parentName || 'Orang Tua Siswa',
+      parentPhone: s.parentPhone || '',
+      birthPlaceDate: s.birthPlaceDate || 'Jakarta, 12 Januari 2008',
+      status: s.status || 'aktif',
+    }));
   }
 
   static getStudentById(id: string): Student | undefined {
@@ -2102,6 +2143,7 @@ export class DataService {
       staff: this.getStaff(),
       dutySchedules: this.getDutySchedules(),
       dutyJournals: this.getDutyJournals(),
+      parentNoticeLetters: this.getParentNoticeLetters(),
       counseling: this.getCounselingRecords(),
       announcements: this.getAnnouncements(),
       notifications: this.getNotifications(),
@@ -2116,12 +2158,30 @@ export class DataService {
   static importDatabaseJSON(jsonStr: string, currentUser: { id: string; name: string; role: Role }): boolean {
     try {
       const parsed = JSON.parse(jsonStr);
-      if (parsed.schoolProfile) setStoredItem('school_profile', parsed.schoolProfile);
-      if (parsed.academicYears) setStoredItem('academic_years', parsed.academicYears);
-      if (parsed.effectiveWeeks) setStoredItem('effective_weeks', parsed.effectiveWeeks);
-      if (parsed.staff) setStoredItem('staff_members', parsed.staff);
-      if (parsed.dutySchedules) setStoredItem('duty_schedules', parsed.dutySchedules);
-      if (parsed.dutyJournals) setStoredItem('duty_journals', parsed.dutyJournals);
+      const sp = parsed.schoolProfile || parsed.school_profile;
+      if (sp) setStoredItem('school_profile', sp);
+
+      const ay = parsed.academicYears || parsed.academic_years;
+      if (ay) setStoredItem('academic_years', ay);
+
+      const ew = parsed.effectiveWeeks || parsed.effective_weeks;
+      if (ew) setStoredItem('effective_weeks', ew);
+
+      const st = parsed.staff || parsed.staff_members;
+      if (st) setStoredItem('staff_members', st);
+
+      const ds = parsed.dutySchedules || parsed.duty_schedules;
+      if (ds) setStoredItem('duty_schedules', ds);
+
+      const dj = parsed.dutyJournals || parsed.duty_journals;
+      if (dj) setStoredItem('duty_journals', dj);
+
+      const pnl = parsed.parentNoticeLetters || parsed.parent_notice_letters;
+      if (pnl) setStoredItem('parent_notice_letters', pnl);
+
+      const wh = parsed.workingHoursConfig || parsed.working_hours_config;
+      if (wh) setStoredItem('working_hours_config', wh);
+
       if (parsed.users) setStoredItem('users', parsed.users);
       if (parsed.students) setStoredItem('students', parsed.students);
       if (parsed.teachers) setStoredItem('teachers', parsed.teachers);
@@ -2133,16 +2193,30 @@ export class DataService {
       if (parsed.assignments) setStoredItem('assignments', parsed.assignments);
       if (parsed.submissions) setStoredItem('submissions', parsed.submissions);
       if (parsed.exams) setStoredItem('exams', parsed.exams);
-      if (parsed.examSubmissions) setStoredItem('exam_submissions', parsed.examSubmissions);
+
+      const exsub = parsed.examSubmissions || parsed.exam_submissions;
+      if (exsub) setStoredItem('exam_submissions', exsub);
+
       if (parsed.schedule) setStoredItem('schedule', parsed.schedule);
-      if (parsed.scheduleBlocks) setStoredItem('schedule_blocks', parsed.scheduleBlocks);
-      if (parsed.lessonPeriodConfig) setStoredItem('lesson_period_config', parsed.lessonPeriodConfig);
+
+      const sb = parsed.scheduleBlocks || parsed.schedule_blocks;
+      if (sb) setStoredItem('schedule_blocks', sb);
+
+      const lpc = parsed.lessonPeriodConfig || parsed.lesson_period_config;
+      if (lpc) setStoredItem('lesson_period_config', lpc);
+
       if (parsed.counseling) setStoredItem('counseling', parsed.counseling);
       if (parsed.announcements) setStoredItem('announcements', parsed.announcements);
       if (parsed.notifications) setStoredItem('notifications', parsed.notifications);
-      if (parsed.parentMessages) setStoredItem('parent_messages', parsed.parentMessages);
-      if (parsed.teacherStudentMessages) setStoredItem('teacher_student_messages', parsed.teacherStudentMessages);
-      if (parsed.auditLogs) setStoredItem('audit_logs', parsed.auditLogs);
+
+      const pm = parsed.parentMessages || parsed.parent_messages;
+      if (pm) setStoredItem('parent_messages', pm);
+
+      const tsm = parsed.teacherStudentMessages || parsed.teacher_student_messages;
+      if (tsm) setStoredItem('teacher_student_messages', tsm);
+
+      const al = parsed.auditLogs || parsed.audit_logs;
+      if (al) setStoredItem('audit_logs', al);
 
       if (parsed.cbtData && typeof parsed.cbtData === 'object') {
         Object.entries(parsed.cbtData).forEach(([k, v]) => {
@@ -2356,6 +2430,12 @@ export class DataService {
     return schedule;
   }
 
+  static saveAllDutySchedules(schedules: DutySchedule[], currentUser: { id: string; name: string; role: Role }): DutySchedule[] {
+    setStoredItem('duty_schedules', schedules);
+    this.logAction(currentUser, 'GENERATE_DUTY_SCHEDULES', 'Piket Sekolah', `Menggenerate ulang seluruh jadwal piket sekolah (${schedules.length} hari).`);
+    return schedules;
+  }
+
   // Blokir Hari Piket Guru/Tendik (Fitur Blok Bagi)
   static getDutyBlockedDays(): Record<string, string[]> {
     return getStoredItem<Record<string, string[]>>('duty_teacher_blocked_days', {});
@@ -2411,51 +2491,167 @@ export class DataService {
     }
   }
 
+  // --- Surat Pemberitahuan & Pemanggilan Orang Tua (Wali Kelas & Guru BK) ---
+  static getParentNoticeLetters(): ParentNoticeLetter[] {
+    return getStoredItem<ParentNoticeLetter[]>('parent_notice_letters', []);
+  }
+
+  static saveParentNoticeLetter(
+    letter: ParentNoticeLetter,
+    currentUser: { id: string; name: string; role: Role }
+  ): ParentNoticeLetter {
+    const list = this.getParentNoticeLetters();
+    const idx = list.findIndex((x) => x.id === letter.id);
+    let updated: ParentNoticeLetter[];
+    if (idx >= 0) {
+      updated = [...list];
+      updated[idx] = letter;
+      this.logAction(
+        currentUser,
+        'UPDATE_PARENT_LETTER',
+        'Surat Orang Tua',
+        `Memperbarui surat pemanggilan/pemberitahuan no. ${letter.letterNumber} untuk orang tua siswa ${letter.studentName}`
+      );
+    } else {
+      updated = [letter, ...list];
+      this.logAction(
+        currentUser,
+        'CREATE_PARENT_LETTER',
+        'Surat Orang Tua',
+        `Menerbitkan surat pemanggilan/pemberitahuan no. ${letter.letterNumber} untuk orang tua siswa ${letter.studentName}`
+      );
+    }
+    setStoredItem('parent_notice_letters', updated);
+    return letter;
+  }
+
+  static deleteParentNoticeLetter(
+    id: string,
+    currentUser: { id: string; name: string; role: Role }
+  ): void {
+    const list = this.getParentNoticeLetters();
+    const target = list.find((x) => x.id === id);
+    const updated = list.filter((x) => x.id !== id);
+    setStoredItem('parent_notice_letters', updated);
+    if (target) {
+      this.logAction(
+        currentUser,
+        'DELETE_PARENT_LETTER',
+        'Surat Orang Tua',
+        `Menghapus arsip surat panggilan no. ${target.letterNumber} siswa ${target.studentName}`
+      );
+    }
+  }
+
+  // --- Pengaturan Jam Kerja PTK Harian (Item 5) ---
+  static getWorkingHoursConfig(): DailyWorkingHour[] {
+    return getStoredItem<DailyWorkingHour[]>('working_hours_config', INITIAL_WORKING_HOURS);
+  }
+
+  static saveWorkingHoursConfig(
+    config: DailyWorkingHour[],
+    currentUser: { id: string; name: string; role: Role }
+  ): DailyWorkingHour[] {
+    setStoredItem('working_hours_config', config);
+    this.logAction(
+      currentUser,
+      'UPDATE_WORKING_HOURS',
+      'Pengaturan Jam Kerja',
+      'Memperbarui konfigurasi jam kerja harian pendidik & tenaga kependidikan (PTK).'
+    );
+    return config;
+  }
+
   // --- Real-time Hosting Server Cloud Sync (sispam.hakito.my.id) ---
   private static syncDebounceTimer: any = null;
 
   static triggerAutoSyncToServer(): void {
     if (typeof window === 'undefined') return;
+    // PENTING: Jangan izinkan auto-push sebelum aplikasi berhasil melakukan pull awal dari server!
+    // Ini mencegah client kosong / mode privat menimpa database MySQL dengan data mock awal.
+    if (!this.isCloudSyncReady) {
+      return;
+    }
     if (this.syncDebounceTimer) {
       clearTimeout(this.syncDebounceTimer);
     }
     this.syncDebounceTimer = setTimeout(() => {
       this.pushToServer().catch(() => {});
-    }, 2000); // 2 second debounce
+    }, 800); // 800ms debounce
   }
 
   static async checkServerStatus(): Promise<{
     online: boolean;
     server?: string;
+    engine?: string;
     hasDatabase?: boolean;
     lastSyncedAt?: string;
+    tableCounts?: Record<string, number>;
     message: string;
   }> {
     try {
       const res = await fetch('./api.php?action=status', { cache: 'no-cache' });
       if (!res.ok) {
-        return { online: false, message: 'Server hosting belum mengaktifkan api.php' };
+        return { online: false, message: 'Server hosting belum merespons api.php (Periksa izin berkas 644 di cPanel)' };
       }
       const data = await res.json();
       return {
         online: data.status === 'online',
         server: data.server || 'sispam.hakito.my.id',
+        engine: data.engine || 'JSON Server Storage',
         hasDatabase: !!data.has_database,
         lastSyncedAt: data.last_synced_at,
+        tableCounts: data.table_counts || {},
         message: data.message || 'Server online dan terhubung.',
       };
     } catch {
       return {
         online: false,
-        message: 'Tidak dapat menjangkau api.php pada server hosting.',
+        message: 'Tidak dapat menjangkau api.php pada server hosting sispam.hakito.my.id',
       };
+    }
+  }
+
+  static async saveDatabaseConfig(config: {
+    host: string;
+    port?: number;
+    database: string;
+    username: string;
+    password?: string;
+  }): Promise<{ success: boolean; message: string; database?: string; tablesCreated?: string[] }> {
+    try {
+      const res = await fetch('./api.php?action=save_db_config', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(config),
+      });
+      const data = await res.json();
+      if (res.ok && data.status === 'success') {
+        // Segera sinkronkan seluruh data aplikasi ke MySQL phpMyAdmin yang baru terhubung!
+        this.isCloudSyncReady = true;
+        await this.pushToServer();
+        return {
+          success: true,
+          message: data.message,
+          database: data.database,
+          tablesCreated: data.tables_created,
+        };
+      }
+      return { success: false, message: data.message || 'Gagal menyimpan konfigurasi database.' };
+    } catch (e: any) {
+      return { success: false, message: e.message || 'Tidak dapat terhubung ke api.php.' };
     }
   }
 
   static async pullFromServer(): Promise<boolean> {
     try {
+      this.isSyncing = true;
       const res = await fetch('./api.php?action=pull', { cache: 'no-cache' });
-      if (!res.ok) return false;
+      if (!res.ok) {
+        this.isCloudSyncReady = true;
+        this.isSyncing = false;
+        return false;
+      }
       const json = await res.json();
       if (json.status === 'success' && json.data) {
         const jsonStr = JSON.stringify(json.data);
@@ -2466,19 +2662,68 @@ export class DataService {
         });
         if (imported) {
           localStorage.setItem(STORAGE_PREFIX + 'last_cloud_sync', new Date().toISOString());
+          this.isCloudSyncReady = true;
+          this.isSyncing = false;
           window.dispatchEvent(new CustomEvent('schoolsphere_cloud_synced', { detail: { action: 'pull', time: new Date() } }));
+          window.dispatchEvent(new CustomEvent('schoolsphere_user_updated', { detail: { action: 'sync' } }));
+          window.dispatchEvent(new CustomEvent('schoolsphere_data_updated', { detail: { action: 'sync' } }));
           return true;
         }
       } else if (json.status === 'empty') {
-        // Jika database di server masih kosong, otomatis unggah data awal dari browser ini
-        await this.pushToServer();
+        // Jika database di server masih kosong:
+        // HANYA super_admin yang sudah login yang boleh mengunggah data awal
+        const authUserId = localStorage.getItem('schoolsphere_auth_user_id');
+        this.isCloudSyncReady = true;
+        this.isSyncing = false;
+        if (authUserId) {
+          await this.pushToServer();
+        }
         return true;
       }
+      this.isCloudSyncReady = true;
+      this.isSyncing = false;
       return false;
     } catch (e) {
       console.warn('Gagal pull data dari server hosting:', e);
+      this.isCloudSyncReady = true;
+      this.isSyncing = false;
       return false;
     }
+  }
+
+  static startRealtimeSync(intervalMs = 15000): () => void {
+    if (typeof window === 'undefined') return () => {};
+
+    // 1. Jalankan pull awal segera
+    this.pullFromServer().catch(() => {});
+
+    // 2. Pull otomatis setiap kali tab browser aktif/difokuskan (misal beralih antar aplikasi/perangkat)
+    const handleFocus = () => {
+      if (!this.isSyncing) {
+        this.pullFromServer().catch(() => {});
+      }
+    };
+
+    window.addEventListener('focus', handleFocus);
+    const handleVis = () => {
+      if (document.visibilityState === 'visible') {
+        handleFocus();
+      }
+    };
+    document.addEventListener('visibilitychange', handleVis);
+
+    // 3. Polling latar belakang berkala (default tiap 15 detik)
+    const timer = setInterval(() => {
+      if (document.visibilityState === 'visible' && !this.isSyncing) {
+        this.pullFromServer().catch(() => {});
+      }
+    }, intervalMs);
+
+    return () => {
+      window.removeEventListener('focus', handleFocus);
+      document.removeEventListener('visibilitychange', handleVis);
+      clearInterval(timer);
+    };
   }
 
   static async pushToServer(): Promise<boolean> {

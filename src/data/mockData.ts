@@ -27,6 +27,7 @@ import {
   DutySchedule,
   StaffMember,
   DutyJournal,
+  DailyWorkingHour,
 } from '../types';
 
 export const INITIAL_SCHOOL_PROFILE: SchoolProfile = {
@@ -1324,7 +1325,7 @@ export const INITIAL_AUDIT_LOGS: AuditLog[] = [
     role: 'super_admin',
     action: 'LOGIN_SUCCESS',
     module: 'Autentikasi',
-    details: 'Login sesi administratif berhasil via Hakito Engine SSO.',
+    details: 'Login sesi administratif berhasil via Hakito Tech SSO.',
   },
   {
     id: 'log-02',
@@ -2043,6 +2044,16 @@ export const INITIAL_DUTY_JOURNALS: DutyJournal[] = [
     createdBy: 'Hendra Wijaya, S.Pd., M.Si.',
     status: 'submitted',
   }
+];
+
+export const INITIAL_WORKING_HOURS: DailyWorkingHour[] = [
+  { day: 'Senin', isWorkDay: true, startTime: '07:00', endTime: '15:30', notes: 'Hari KBM Reguler & Upacara Bendera' },
+  { day: 'Selasa', isWorkDay: true, startTime: '07:00', endTime: '15:30', notes: 'Hari KBM Reguler' },
+  { day: 'Rabu', isWorkDay: true, startTime: '07:00', endTime: '15:30', notes: 'Hari KBM Reguler & Pramuka' },
+  { day: 'Kamis', isWorkDay: true, startTime: '07:00', endTime: '15:30', notes: 'Hari KBM Reguler & Literasi' },
+  { day: 'Jumat', isWorkDay: true, startTime: '07:00', endTime: '11:45', notes: 'Senam Pagi & Sholat Jumat' },
+  { day: 'Sabtu', isWorkDay: true, startTime: '07:00', endTime: '13:00', notes: 'Pengembangan Diri & Ekstrakurikuler' },
+  { day: 'Minggu', isWorkDay: false, startTime: '00:00', endTime: '00:00', notes: 'Libur Akhir Pekan' },
 ];
 
 

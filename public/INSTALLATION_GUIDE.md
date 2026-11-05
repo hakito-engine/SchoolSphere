@@ -37,10 +37,10 @@ Ikuti langkah-langkah di terminal server:
 #### Langkah 2.1: Unduh / Kloning Repositori
 ```bash
 # Kloning repositori kode sumber
-git clone https://github.com/sekolah/schoolsphere-app.git
+git clone https://github.com/sekolah/sispam-app.git
 
 # Masuk ke direktori aplikasi
-cd schoolsphere-app
+cd sispam-app
 ```
 
 #### Langkah 2.2: Instal Dependensi NPM
@@ -61,7 +61,7 @@ Buka peramban di `http://localhost:3000` atau `http://IP-SERVER:3000` untuk memv
 # Mengompilasi aplikasi menjadi berkas statis teroptimasi (HTML, JS, CSS)
 npm run build
 ```
-Hasil kompilasi akan otomatis disimpan di dalam direktori **`dist/`**. Seluruh isi folder `dist/` ini siap dipindahkan ke direktori publik web server Anda (misal: `/var/www/schoolsphere/html`).
+Hasil kompilasi akan otomatis disimpan di dalam direktori **`dist/`**. Seluruh isi folder `dist/` ini siap dipindahkan ke direktori publik web server Anda (misal: `/var/www/sispam/html`).
 
 ---
 
@@ -70,7 +70,7 @@ Hasil kompilasi akan otomatis disimpan di dalam direktori **`dist/`**. Seluruh i
 Karena aplikasi ini dibangun dengan arsitektur **Single Page Application (SPA)** berbasis React dan Vite, web server harus mengarahkan seluruh rute URL (seperti `/attendance`, `/teachers`, `/settings`) kembali ke `index.html`. Jika tidak, pengguna akan mengalami galat **HTTP 404 Not Found** saat me-refresh halaman.
 
 #### Contoh Berkas Konfigurasi Nginx:
-Buat berkas konfigurasi di `/etc/nginx/sites-available/schoolsphere.conf`:
+Buat berkas konfigurasi di `/etc/nginx/sites-available/sispam.conf`:
 
 ```nginx
 server {
@@ -79,7 +79,7 @@ server {
     server_name sman1nusantara.sch.id www.sman1nusantara.sch.id;
 
     # Lokasi berkas hasil build (folder dist)
-    root /var/www/schoolsphere/dist;
+    root /var/www/sispam/dist;
     index index.html;
 
     # Kompresi Gzip untuk performa kecepatan tinggi
@@ -115,7 +115,7 @@ server {
 #### Aktifkan dan Restart Nginx:
 ```bash
 # Aktifkan symlink
-sudo ln -s /etc/nginx/sites-available/schoolsphere.conf /etc/nginx/sites-enabled/
+sudo ln -s /etc/nginx/sites-available/sispam.conf /etc/nginx/sites-enabled/
 
 # Uji sintaks konfigurasi
 sudo nginx -t
@@ -241,10 +241,10 @@ CMD ["nginx", "-g", "daemon off;"]
 #### Jalankan Kontainer:
 ```bash
 # Build Docker image
-docker build -t schoolsphere:latest .
+docker build -t sispam:latest .
 
 # Jalankan container pada port 80
-docker run -d -p 80:80 --name schoolsphere-web schoolsphere:latest
+docker run -d -p 80:80 --name sispam-web sispam:latest
 ```
 
 ---

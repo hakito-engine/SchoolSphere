@@ -285,13 +285,13 @@ export const TeachingJournalsView: React.FC = () => {
                     Kehadiran & Kendala
                   </p>
                   <div className="flex items-center gap-2 font-mono text-[11px] mt-0.5 text-slate-700 dark:text-slate-300">
-                    <span className="text-emerald-600 font-bold">{j.attendanceCount.hadir} Hadir</span>
+                    <span className="text-emerald-600 font-bold">{j.attendanceCount?.hadir ?? 0} Hadir</span>
                     <span>·</span>
-                    <span className="text-blue-600">{j.attendanceCount.sakit} Sakit</span>
+                    <span className="text-blue-600">{j.attendanceCount?.sakit ?? 0} Sakit</span>
                     <span>·</span>
-                    <span className="text-amber-600">{j.attendanceCount.izin} Izin</span>
+                    <span className="text-amber-600">{j.attendanceCount?.izin ?? 0} Izin</span>
                     <span>·</span>
-                    <span className="text-rose-600 font-bold">{j.attendanceCount.alpa} Alpa</span>
+                    <span className="text-rose-600 font-bold">{j.attendanceCount?.alpa ?? 0} Alpa</span>
                   </div>
                   <p className="text-slate-600 dark:text-slate-400 mt-1 italic">
                     Kendala: {j.obstacles || 'Tidak ada kendala berarti.'}
@@ -556,7 +556,7 @@ export const TeachingJournalsView: React.FC = () => {
                   </td>
                   <td className="border border-black py-1 px-3 text-[11px]">{j.activities}</td>
                   <td className="border border-black py-1 px-2 text-center font-mono text-[11px]">
-                    H:{j.attendanceCount.hadir} S:{j.attendanceCount.sakit} A:{j.attendanceCount.alpa}
+                    H:{j.attendanceCount?.hadir ?? 0} S:{j.attendanceCount?.sakit ?? 0} A:{j.attendanceCount?.alpa ?? 0}
                   </td>
                   <td className="border border-black py-1 px-2 text-center uppercase font-bold text-[10px]">
                     {j.status}

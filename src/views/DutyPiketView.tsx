@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { DataService } from '../services/dataService';
 import {
@@ -10,9 +10,11 @@ import {
   DutyGuestRecord,
   DutyIncidentRecord,
   DutyStudentClassSummary,
+  DailyWorkingHour,
 } from '../types';
 import { OfficialLetterhead } from '../components/common/OfficialLetterhead';
 import { formatDateIndonesian } from '../utils/formatters';
+import { exportElementToPdf } from '../utils/pdfExport';
 import {
   ClipboardCheck,
   Calendar,
@@ -44,9 +46,14 @@ import {
   Sparkles,
   Ban,
   Lock,
+  Loader2,
 } from 'lucide-react';
 
-export const DutyPiketView: React.FC = () => {
+interface DutyPiketViewProps {
+  initialTab?: 'jurnal_input' | 'jadwal_mingguan' | 'riwayat_jurnal';
+}
+
+export const DutyPiketView: React.FC<DutyPiketViewProps> = ({ initialTab }) => {
   const { currentUser } = useAuth();
 
   // Request 20.8: Orang tua tidak punya akses ke Piket
@@ -72,13 +79,28 @@ export const DutyPiketView: React.FC = () => {
   const students = useMemo(() => DataService.getStudents(), []);
   const schedules = useMemo(() => DataService.getSchedule(), []);
 
-  // Tabs: 'jurnal_input' | 'jadwal_mingguan' | 'riwayat_jurnal' (Tab Data Pegawai dipindahkan ke Menu Khusus Tendik)
-  const [activeTab, setActiveTab] = useState<'jurnal_input' | 'jadwal_mingguan' | 'riwayat_jurnal'>('jurnal_input');
+  // Tabs: 'jurnal_input' | 'jadwal_mingguan' | 'riwayat_jurnal'
+  const [activeTab, setActiveTab] = useState<'jurnal_input' | 'jadwal_mingguan' | 'riwayat_jurnal'>(
+    initialTab || 'jurnal_input'
+  );
+
+  // Status edit jurnal yang sudah terbit (< 24 jam)
+  const [editingPublishedJournalId, setEditingPublishedJournalId] = useState<string | null>(null);
 
   // Master Data State
   const [dutySchedules, setDutySchedules] = useState<DutySchedule[]>(() => DataService.getDutySchedules());
   const [dutyJournals, setDutyJournals] = useState<DutyJournal[]>(() => DataService.getDutyJournals());
   const [staffList, setStaffList] = useState<StaffMember[]>(() => DataService.getStaff());
+  const [workingHours, setWorkingHours] = useState<DailyWorkingHour[]>(() => DataService.getWorkingHoursConfig());
+
+  const handleUpdateWorkingHours = (hours: DailyWorkingHour[]) => {
+    setWorkingHours(hours);
+    DataService.saveWorkingHoursConfig(hours, {
+      id: currentUser.id,
+      name: currentUser.name,
+      role: currentUser.role,
+    });
+  };
 
   // Fitur Blok Bagi: Blokir Hari Piket Guru / Tendik (Item 9)
   const [teacherBlockedDays, setTeacherBlockedDays] = useState<Record<string, string[]>>(() =>
@@ -137,7 +159,7 @@ export const DutyPiketView: React.FC = () => {
   // Rekapitulasi Presensi Siswa per Kelas
   const [studentAttendanceSummaries, setStudentAttendanceSummaries] = useState<DutyStudentClassSummary[]>([]);
 
-  // Kejadian Penting
+  // Kejadian Penting (Request 7: Melibatkan Guru & Tendik)
   const [incidents, setIncidents] = useState<DutyIncidentRecord[]>([]);
   const [newIncident, setNewIncident] = useState<{
     time: string;
@@ -146,6 +168,10 @@ export const DutyPiketView: React.FC = () => {
     involvesStudents: boolean;
     filterClassId: string;
     selectedStudentIds: string[];
+    involvesTeachers: boolean;
+    selectedTeacherIds: string[];
+    involvesStaff: boolean;
+    selectedStaffIds: string[];
     followUp: string;
     referredToBK: boolean;
   }>({
@@ -155,6 +181,10 @@ export const DutyPiketView: React.FC = () => {
     involvesStudents: false,
     filterClassId: classes[0]?.id || '',
     selectedStudentIds: [],
+    involvesTeachers: false,
+    selectedTeacherIds: [],
+    involvesStaff: false,
+    selectedStaffIds: [],
     followUp: '',
     referredToBK: false,
   });
@@ -162,8 +192,79 @@ export const DutyPiketView: React.FC = () => {
   const [generalNotes, setGeneralNotes] = useState<string>('Kegiatan belajar mengajar berjalan aman, tertib, dan kondusif.');
   const [submitNotice, setSubmitNotice] = useState<string | null>(null);
 
-  // Modal Print State
+  // Modal Print States & Canvas Refs (Request 9 & 12, Item 5 & 6)
   const [printModalJournal, setPrintModalJournal] = useState<DutyJournal | null>(null);
+  const [includeJournalDocNumber, setIncludeJournalDocNumber] = useState<boolean>(true);
+  const [isSchedulePrintModalOpen, setIsSchedulePrintModalOpen] = useState<boolean>(false);
+  const [includeScheduleDocNumber, setIncludeScheduleDocNumber] = useState<boolean>(true);
+  const [printScheduleStartDate, setPrintScheduleStartDate] = useState<string>(() =>
+    new Date().toISOString().substring(0, 10)
+  );
+  const [printScheduleEndDate, setPrintScheduleEndDate] = useState<string>(() =>
+    new Date(Date.now() + 30 * 86400000).toISOString().substring(0, 10)
+  );
+  const [printScheduleMode, setPrintScheduleMode] = useState<'mingguan' | 'harian_rentang'>('mingguan');
+  const journalPrintCanvasRef = useRef<HTMLDivElement>(null);
+  const schedulePrintCanvasRef = useRef<HTMLDivElement>(null);
+  const [isExportingJournalPdf, setIsExportingJournalPdf] = useState<boolean>(false);
+  const [isExportingSchedulePdf, setIsExportingSchedulePdf] = useState<boolean>(false);
+
+  // Daftar item jadwal yang dicetak sesuai rentang tanggal & mode (Item 5)
+  const printedScheduleItems = useMemo(() => {
+    if (printScheduleMode === 'mingguan') {
+      return dutySchedules.map((sch) => ({
+        dayLabel: sch.day,
+        dateLabel: `${formatDateIndonesian(printScheduleStartDate)} s.d ${formatDateIndonesian(printScheduleEndDate)}`,
+        standbyLocation: sch.standbyLocation,
+        dutyOfficers: sch.dutyOfficers,
+        notes: sch.notes || 'Standby 15 menit sebelum jam pelajaran pertama.',
+      }));
+    }
+
+    try {
+      const items = [];
+      const start = new Date(printScheduleStartDate + 'T00:00:00');
+      const end = new Date(printScheduleEndDate + 'T00:00:00');
+      const dayNames = ['Minggu', 'Senin', 'Selasa', 'Rabu', 'Kamis', 'Jumat', 'Sabtu'];
+      const curr = new Date(start);
+      let steps = 0;
+
+      while (curr <= end && steps < 62) {
+        steps++;
+        const dayName = dayNames[curr.getDay()];
+        const matchingSchedule = dutySchedules.find((s) => s.day === dayName);
+
+        if (matchingSchedule && dayName !== 'Minggu') {
+          const dateStr = curr.toISOString().substring(0, 10);
+          items.push({
+            dayLabel: dayName,
+            dateLabel: formatDateIndonesian(dateStr),
+            standbyLocation: matchingSchedule.standbyLocation,
+            dutyOfficers: matchingSchedule.dutyOfficers,
+            notes: matchingSchedule.notes || 'Standby 15 menit sebelum jam pelajaran pertama.',
+          });
+        }
+        curr.setDate(curr.getDate() + 1);
+      }
+      return items.length > 0
+        ? items
+        : dutySchedules.map((sch) => ({
+            dayLabel: sch.day,
+            dateLabel: `${formatDateIndonesian(printScheduleStartDate)} s.d ${formatDateIndonesian(printScheduleEndDate)}`,
+            standbyLocation: sch.standbyLocation,
+            dutyOfficers: sch.dutyOfficers,
+            notes: sch.notes,
+          }));
+    } catch {
+      return dutySchedules.map((sch) => ({
+        dayLabel: sch.day,
+        dateLabel: `${formatDateIndonesian(printScheduleStartDate)} s.d ${formatDateIndonesian(printScheduleEndDate)}`,
+        standbyLocation: sch.standbyLocation,
+        dutyOfficers: sch.dutyOfficers,
+        notes: sch.notes,
+      }));
+    }
+  }, [dutySchedules, printScheduleMode, printScheduleStartDate, printScheduleEndDate]);
 
   // Edit Jadwal Piket Modal
   const [editingSchedule, setEditingSchedule] = useState<DutySchedule | null>(null);
@@ -234,6 +335,8 @@ export const DutyPiketView: React.FC = () => {
           teacherId,
           teacherName,
           status: 'hadir',
+          checkInTime: '06:45',
+          checkOutTime: '15:30',
           slots: [],
         });
       }
@@ -260,6 +363,8 @@ export const DutyPiketView: React.FC = () => {
           teacherId: t.id,
           teacherName: t.name,
           status: 'hadir',
+          checkInTime: '06:45',
+          checkOutTime: '15:30',
           slots: [
             {
               classId: classes[idx % classes.length]?.id || 'cls-1',
@@ -524,7 +629,7 @@ export const DutyPiketView: React.FC = () => {
     setGuests(guests.filter((g) => g.id !== id));
   };
 
-  // Tambah Kejadian Penting
+  // Tambah Kejadian Penting (Melibatkan Siswa, Guru, dan Tendik)
   const handleAddIncident = (e: React.FormEvent) => {
     e.preventDefault();
     if (!newIncident.description.trim() || !newIncident.followUp.trim()) {
@@ -532,9 +637,17 @@ export const DutyPiketView: React.FC = () => {
       return;
     }
 
-    const selectedNames = students
+    const selectedStudentNames = students
       .filter((s) => newIncident.selectedStudentIds.includes(s.id))
       .map((s) => `${s.name} (${s.className})`);
+
+    const selectedTeacherNames = teachers
+      .filter((t) => newIncident.selectedTeacherIds.includes(t.id))
+      .map((t) => t.name);
+
+    const selectedStaffNames = staffList
+      .filter((st) => newIncident.selectedStaffIds.includes(st.id))
+      .map((st) => `${st.name} (${st.position})`);
 
     const item: DutyIncidentRecord = {
       id: 'inc-' + Date.now(),
@@ -543,7 +656,13 @@ export const DutyPiketView: React.FC = () => {
       partiesInvolved: newIncident.partiesInvolved.trim() || 'Siswa & Guru Piket',
       involvesStudents: newIncident.involvesStudents,
       involvedStudentIds: newIncident.involvesStudents ? newIncident.selectedStudentIds : [],
-      involvedStudentNames: newIncident.involvesStudents ? selectedNames : [],
+      involvedStudentNames: newIncident.involvesStudents ? selectedStudentNames : [],
+      involvesTeachers: newIncident.involvesTeachers,
+      involvedTeacherIds: newIncident.involvesTeachers ? newIncident.selectedTeacherIds : [],
+      involvedTeacherNames: newIncident.involvesTeachers ? selectedTeacherNames : [],
+      involvesStaff: newIncident.involvesStaff,
+      involvedStaffIds: newIncident.involvesStaff ? newIncident.selectedStaffIds : [],
+      involvedStaffNames: newIncident.involvesStaff ? selectedStaffNames : [],
       followUp: newIncident.followUp.trim(),
       referredToBK: newIncident.referredToBK,
     };
@@ -556,6 +675,10 @@ export const DutyPiketView: React.FC = () => {
       involvesStudents: false,
       filterClassId: classes[0]?.id || '',
       selectedStudentIds: [],
+      involvesTeachers: false,
+      selectedTeacherIds: [],
+      involvesStaff: false,
+      selectedStaffIds: [],
       followUp: '',
       referredToBK: false,
     });
@@ -601,12 +724,13 @@ export const DutyPiketView: React.FC = () => {
   // Permission check untuk Wakasek Kurikulum (Request 20)
   const canManageSchedule = ['wakasek_kurikulum', 'super_admin'].includes(currentUser.role);
 
-  // State untuk Generator Jadwal Piket Wakasek Kurikulum (Request 20.1 - 20.4)
+  // State untuk Generator Jadwal Piket Wakasek Kurikulum (Request 20.1 - 20.4, Request 11 & 13)
   const [isGeneratorModalOpen, setIsGeneratorModalOpen] = useState(false);
   const [genDays, setGenDays] = useState<string[]>(['Senin', 'Selasa', 'Rabu', 'Kamis', 'Jumat', 'Sabtu']);
   const [genStartDate, setGenStartDate] = useState(new Date().toISOString().substring(0, 10));
   const [genEndDate, setGenEndDate] = useState(new Date(Date.now() + 30 * 86400000).toISOString().substring(0, 10));
   const [genOfficersPerDay, setGenOfficersPerDay] = useState<number>(3);
+  const [genMinDayGap, setGenMinDayGap] = useState<number>(3);
   const [genIncludeTendik, setGenIncludeTendik] = useState<boolean>(false);
 
   // Cek apakah user saat ini adalah Petugas Piket Hari Ini (Request 20.5)
@@ -633,7 +757,7 @@ export const DutyPiketView: React.FC = () => {
     const off3 = teachers.find((t) => t.id === officer3Id) || teachers[2];
 
     const draftJournal: DutyJournal = {
-      id: 'jrn-draft-' + journalDate,
+      id: editingPublishedJournalId || 'jrn-draft-' + journalDate,
       date: journalDate,
       day: journalDay,
       academicYear: activeAY.year,
@@ -673,10 +797,27 @@ export const DutyPiketView: React.FC = () => {
     setTimeout(() => setSubmitNotice(null), 5000);
   };
 
-  // Request 19 & 20.5: Kirim & Terbitkan Jurnal (Hanya Guru Piket Bertugas)
+  // Request 8 & 10: Kirim & Terbitkan Jurnal (Hanya 1x per Tanggal Jurnal & Edit < 24 Jam)
   const handleSubmitJournal = () => {
     if (!isAssignedOfficerToday) {
       alert('Akses Dibatasi: Penerbitan dan pengesahan jurnal piket hanya dapat dilakukan oleh Petugas Guru Piket yang bertugas hari ini.');
+      return;
+    }
+
+    // Request 10: Jurnal piket hanya bisa diterbitkan 1x per tanggal jurnal
+    const existingPublished = dutyJournals.find(
+      (j) =>
+        j.date === journalDate &&
+        (j.status === 'published' || j.status === 'submitted') &&
+        j.id !== editingPublishedJournalId
+    );
+
+    if (existingPublished) {
+      alert(
+        `Peringatan: Jurnal piket untuk tanggal ${formatDateIndonesian(
+          journalDate
+        )} sudah pernah diterbitkan sebelumnya (ID: ${existingPublished.id}). Jurnal hanya boleh diterbitkan 1x per tanggal jurnal. Jika ingin mengubahnya, silakan gunakan tombol 'Edit Jurnal' pada Riwayat Laporan Piket sebelum batas 24 jam.`
+      );
       return;
     }
 
@@ -684,8 +825,11 @@ export const DutyPiketView: React.FC = () => {
     const off2 = teachers.find((t) => t.id === officer2Id) || teachers[1];
     const off3 = teachers.find((t) => t.id === officer3Id) || teachers[2];
 
+    const targetId = editingPublishedJournalId || 'jrn-' + journalDate + '-' + Date.now();
+    const existingJournalData = editingPublishedJournalId ? dutyJournals.find((j) => j.id === editingPublishedJournalId) : null;
+
     const newJournal: DutyJournal = {
-      id: 'jrn-' + journalDate + '-' + Date.now(),
+      id: targetId,
       date: journalDate,
       day: journalDay,
       academicYear: activeAY.year,
@@ -709,7 +853,7 @@ export const DutyPiketView: React.FC = () => {
       studentAttendance: studentAttendanceSummaries,
       incidents,
       generalNotes,
-      createdAt: new Date().toISOString(),
+      createdAt: existingJournalData?.createdAt || new Date().toISOString(),
       createdBy: currentUser.name,
       status: 'published',
     };
@@ -721,6 +865,7 @@ export const DutyPiketView: React.FC = () => {
     });
 
     setDutyJournals(DataService.getDutyJournals());
+    setEditingPublishedJournalId(null);
     setSubmitNotice('✅ Jurnal Piket Harian resmi diterbitkan dan disahkan! Siap dicetak.');
     setTimeout(() => setSubmitNotice(null), 4000);
 
@@ -759,7 +904,7 @@ export const DutyPiketView: React.FC = () => {
     });
   };
 
-  // Request 20.1 - 20.4, Item 9 & Item 10: Generator Jadwal Piket oleh Wakasek Kurikulum dengan Fitur Blok Bagi
+  // Request 20.1 - 20.4, Item 9, 10, 11 & 13: Generator Jadwal Piket dengan Anti-Berdekatan (Jarak Minimal Hari) & Rotasi Dinamis
   const handleGenerateDutySchedule = () => {
     if (!canManageSchedule) return;
 
@@ -783,23 +928,46 @@ export const DutyPiketView: React.FC = () => {
       return;
     }
 
-    let rotationIndex = 0;
+    // Rotasi dinamis kandidat dasar: acak/putar urutan personil setiap kali tombol Generate diklik
+    // agar hasil jadwal selalu dinamis, variatif, dan tidak statis
+    const shuffledCandidates = [...baseCandidates].sort(() => Math.random() - 0.5);
+
+    // Melacak indeks hari terakhir personil ditugaskan untuk menjaga jarak waktu bertugas minimal (Request 13)
+    const lastAssignedDay: Record<string, number> = {};
+
     const generatedSchedules: DutySchedule[] = genDays.map((day, dIdx) => {
-      // Fitur Blok Bagi (Item 9): Filter kandidat yang TIDAK diblokir pada hari ini
-      const availablePool = baseCandidates.filter(
+      // 1. Filter kandidat yang TIDAK diblokir pada hari ini (Fitur Blok Bagi - Item 9)
+      const availablePool = shuffledCandidates.filter(
         (cand) => !(teacherBlockedDays[cand.id] || []).includes(day)
       );
 
-      if (availablePool.length < genOfficersPerDay) {
-        console.warn(`Peringatan: Personil yang tidak diblokir pada hari ${day} (${availablePool.length}) kurang dari ${genOfficersPerDay}.`);
-      }
+      // 2. Terapkan algoritma Anti-Berdekatan (Request 13):
+      // Urutkan kandidat berdasarkan jeda hari sejak tugas terakhir.
+      // Prioritaskan yang belum pernah ditugaskan atau yang jedanya >= genMinDayGap.
+      const candidateSource = availablePool.length >= genOfficersPerDay ? availablePool : shuffledCandidates;
+      const sortedPool = [...candidateSource].sort((a, b) => {
+        const lastA = lastAssignedDay[a.id] !== undefined ? lastAssignedDay[a.id] : -999;
+        const lastB = lastAssignedDay[b.id] !== undefined ? lastAssignedDay[b.id] : -999;
+        const gapA = dIdx - lastA;
+        const gapB = dIdx - lastB;
 
-      // Gunakan availablePool jika cukup, fallback ke pool umum jika seluruh personil diblokir
-      const effectivePool = availablePool.length >= genOfficersPerDay ? availablePool : (availablePool.length > 0 ? availablePool : baseCandidates);
+        const isGoodA = gapA >= genMinDayGap;
+        const isGoodB = gapB >= genMinDayGap;
+
+        if (isGoodA && !isGoodB) return -1;
+        if (!isGoodA && isGoodB) return 1;
+        return gapB - gapA; // Yang jaraknya paling jauh diprioritaskan
+      });
+
       const officers = [];
+      const assignedThisDay = new Set<string>();
+
       for (let i = 0; i < genOfficersPerDay; i++) {
-        const candidate = effectivePool[rotationIndex % effectivePool.length];
-        rotationIndex++;
+        // Cari kandidat yang belum terpilih pada hari ini
+        const candidate = sortedPool.find((c) => !assignedThisDay.has(c.id)) || sortedPool[i % sortedPool.length];
+        assignedThisDay.add(candidate.id);
+        lastAssignedDay[candidate.id] = dIdx;
+
         officers.push({
           teacherId: candidate.id,
           teacherName: candidate.name,
@@ -819,24 +987,22 @@ export const DutyPiketView: React.FC = () => {
         dateRangeText: `${formatDateIndonesian(genStartDate)} s.d ${formatDateIndonesian(genEndDate)}`,
         standbyLocation: 'Pos Piket Utama (Lobi Gedung A)',
         dutyOfficers: officers,
-        notes: `Berlaku periode ${formatDateIndonesian(genStartDate)} s.d ${formatDateIndonesian(genEndDate)}. Sesuai aturan blokir hari mengajar.`,
+        notes: `Berlaku periode ${formatDateIndonesian(genStartDate)} s.d ${formatDateIndonesian(genEndDate)}. Jarak minimal jeda bertugas: ${genMinDayGap} hari.`,
       };
     });
 
-    generatedSchedules.forEach((sch) => {
-      DataService.saveDutySchedule(sch, {
-        id: currentUser.id,
-        name: currentUser.name,
-        role: currentUser.role,
-      });
+    DataService.saveAllDutySchedules(generatedSchedules, {
+      id: currentUser.id,
+      name: currentUser.name,
+      role: currentUser.role,
     });
 
-    setDutySchedules(DataService.getDutySchedules());
+    setDutySchedules(generatedSchedules);
     setIsGeneratorModalOpen(false);
     setSubmitNotice(
-      `✨ Berhasil menggenerate ulang jadwal piket untuk rentang ${formatDateIndonesian(genStartDate)} s.d ${formatDateIndonesian(genEndDate)} (${genDays.join(', ')}) dengan ${genOfficersPerDay} petugas/hari sesuai aturan blokir hari personil!`
+      `✨ Berhasil menggenerate jadwal piket baru secara dinamis untuk rentang ${formatDateIndonesian(genStartDate)} s.d ${formatDateIndonesian(genEndDate)} (${genDays.join(', ')}) dengan ${genOfficersPerDay} petugas/hari!`
     );
-    setTimeout(() => setSubmitNotice(null), 6000);
+    setTimeout(() => setSubmitNotice(null), 5000);
   };
 
 
@@ -971,6 +1137,33 @@ export const DutyPiketView: React.FC = () => {
           <span>3. Riwayat Laporan Piket ({dutyJournals.length})</span>
         </button>
       </div>
+
+      {/* Banner Mode Edit Jurnal Terbit (< 24 Jam) */}
+      {editingPublishedJournalId && activeTab === 'jurnal_input' && (
+        <div className="p-4 rounded-2xl bg-amber-50 dark:bg-amber-950/50 border border-amber-300 dark:border-amber-800 text-amber-900 dark:text-amber-200 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-xs animate-fadeIn">
+          <div className="flex items-center gap-2.5">
+            <AlertTriangle className="w-5 h-5 text-amber-600 shrink-0" />
+            <div>
+              <p className="font-bold text-xs">
+                Mode Edit Jurnal Piket Terbit (ID: {editingPublishedJournalId})
+              </p>
+              <p className="text-[11px] text-amber-700 dark:text-amber-300">
+                Sesuai aturan operasional, jurnal yang telah diterbitkan masih dapat diedit dan diperbarui sebelum 24 jam dari waktu penerbitan.
+              </p>
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={() => {
+              setEditingPublishedJournalId(null);
+              initDayData(journalDay, journalDate);
+            }}
+            className="px-3 py-1.5 text-xs font-bold bg-white dark:bg-slate-900 text-amber-800 dark:text-amber-300 border border-amber-300 dark:border-amber-700 rounded-xl hover:bg-amber-100 transition-colors cursor-pointer shrink-0"
+          >
+            Batal Edit & Buat Baru
+          </button>
+        </div>
+      )}
 
       {/* ============================================================== */}
       {/* TAB 1: FORM PENGISIAN JURNAL PIKET HARIAN (LENGKAP 2.2.1 - 2.2.9) */}
@@ -1124,6 +1317,38 @@ export const DutyPiketView: React.FC = () => {
                       >
                         Tandai Tidak Hadir ➔
                       </button>
+                    </div>
+
+                    {/* Request 3: Jam Datang & Jam Pulang Guru di Jurnal Piket */}
+                    <div className="flex items-center gap-3 pt-1 pb-1 text-[11px] bg-white dark:bg-slate-900 p-2 rounded-lg border border-slate-200/60 dark:border-slate-700/60">
+                      <div className="flex items-center gap-1.5 flex-1">
+                        <Clock className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+                        <span className="text-slate-500 font-semibold">Datang:</span>
+                        <input
+                          type="time"
+                          value={teacherRec.checkInTime || '06:45'}
+                          onChange={(e) => {
+                            const newPresent = [...teachersPresent];
+                            teacherRec.checkInTime = e.target.value;
+                            setTeachersPresent(newPresent);
+                          }}
+                          className="w-full px-1.5 py-0.5 rounded border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 font-mono text-[11px]"
+                        />
+                      </div>
+                      <div className="flex items-center gap-1.5 flex-1">
+                        <Clock className="w-3.5 h-3.5 text-indigo-600 shrink-0" />
+                        <span className="text-slate-500 font-semibold">Pulang:</span>
+                        <input
+                          type="time"
+                          value={teacherRec.checkOutTime || '15:30'}
+                          onChange={(e) => {
+                            const newPresent = [...teachersPresent];
+                            teacherRec.checkOutTime = e.target.value;
+                            setTeachersPresent(newPresent);
+                          }}
+                          className="w-full px-1.5 py-0.5 rounded border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 font-mono text-[11px]"
+                        />
+                      </div>
                     </div>
 
                     {/* Rincian Jam & Kelas Mengajar */}
@@ -1868,6 +2093,80 @@ export const DutyPiketView: React.FC = () => {
                   )}
                 </div>
 
+                {/* Request 7: Checkbox Melibatkan Guru */}
+                <div className="p-2.5 rounded-lg bg-blue-50 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-900/40 space-y-2">
+                  <label className="flex items-center gap-2 cursor-pointer font-bold text-blue-900 dark:text-blue-200">
+                    <input
+                      type="checkbox"
+                      checked={newIncident.involvesTeachers}
+                      onChange={(e) => setNewIncident({ ...newIncident, involvesTeachers: e.target.checked })}
+                      className="rounded text-blue-600 focus:ring-0"
+                    />
+                    <span>Melibatkan Guru / Pendidik</span>
+                  </label>
+
+                  {newIncident.involvesTeachers && (
+                    <div className="space-y-1.5 pt-1 border-t border-blue-200/60 dark:border-blue-900/60">
+                      <span className="text-[10px] text-slate-500 block">Pilih Guru yang Terkait / Saksi / Terlibat:</span>
+                      <div className="max-h-28 overflow-y-auto p-1.5 bg-white dark:bg-slate-900 rounded border border-slate-200 dark:border-slate-700 grid grid-cols-1 sm:grid-cols-2 gap-1 text-[11px]">
+                        {teachers.map((t) => (
+                          <label key={t.id} className="flex items-center gap-1.5 cursor-pointer">
+                            <input
+                              type="checkbox"
+                              checked={newIncident.selectedTeacherIds.includes(t.id)}
+                              onChange={(e) => {
+                                const updated = e.target.checked
+                                  ? [...newIncident.selectedTeacherIds, t.id]
+                                  : newIncident.selectedTeacherIds.filter((id) => id !== t.id);
+                                setNewIncident({ ...newIncident, selectedTeacherIds: updated });
+                              }}
+                              className="rounded text-blue-600"
+                            />
+                            <span className="truncate">{t.name}</span>
+                          </label>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                {/* Request 7: Checkbox Melibatkan Tendik / Pegawai */}
+                <div className="p-2.5 rounded-lg bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-900/40 space-y-2">
+                  <label className="flex items-center gap-2 cursor-pointer font-bold text-emerald-900 dark:text-emerald-200">
+                    <input
+                      type="checkbox"
+                      checked={newIncident.involvesStaff}
+                      onChange={(e) => setNewIncident({ ...newIncident, involvesStaff: e.target.checked })}
+                      className="rounded text-emerald-600 focus:ring-0"
+                    />
+                    <span>Melibatkan Tenaga Kependidikan (Tendik / Pegawai)</span>
+                  </label>
+
+                  {newIncident.involvesStaff && (
+                    <div className="space-y-1.5 pt-1 border-t border-emerald-200/60 dark:border-emerald-900/60">
+                      <span className="text-[10px] text-slate-500 block">Pilih Tendik / Pegawai Terkait:</span>
+                      <div className="max-h-24 overflow-y-auto p-1.5 bg-white dark:bg-slate-900 rounded border border-slate-200 dark:border-slate-700 grid grid-cols-1 sm:grid-cols-2 gap-1 text-[11px]">
+                        {staffList.map((st) => (
+                          <label key={st.id} className="flex items-center gap-1.5 cursor-pointer">
+                            <input
+                              type="checkbox"
+                              checked={newIncident.selectedStaffIds.includes(st.id)}
+                              onChange={(e) => {
+                                const updated = e.target.checked
+                                  ? [...newIncident.selectedStaffIds, st.id]
+                                  : newIncident.selectedStaffIds.filter((id) => id !== st.id);
+                                setNewIncident({ ...newIncident, selectedStaffIds: updated });
+                              }}
+                              className="rounded text-emerald-600"
+                            />
+                            <span className="truncate">{st.name} ({st.position})</span>
+                          </label>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+
                 <div>
                   <label className="block text-slate-500 font-semibold mb-0.5">Tindak Lanjut Penyelesaian *</label>
                   <input
@@ -1925,6 +2224,20 @@ export const DutyPiketView: React.FC = () => {
                       <div className="p-1.5 rounded bg-white dark:bg-slate-900 border border-amber-200 dark:border-amber-900/40 text-[10.5px]">
                         <span className="font-bold text-amber-800 dark:text-amber-300">Siswa Terlibat: </span>
                         <span>{inc.involvedStudentNames.join(', ')}</span>
+                      </div>
+                    )}
+
+                    {inc.involvesTeachers && inc.involvedTeacherNames && inc.involvedTeacherNames.length > 0 && (
+                      <div className="p-1.5 rounded bg-blue-50/60 dark:bg-blue-950/40 border border-blue-200 dark:border-blue-900/40 text-[10.5px]">
+                        <span className="font-bold text-blue-800 dark:text-blue-300">Guru Terlibat: </span>
+                        <span>{inc.involvedTeacherNames.join(', ')}</span>
+                      </div>
+                    )}
+
+                    {inc.involvesStaff && inc.involvedStaffNames && inc.involvedStaffNames.length > 0 && (
+                      <div className="p-1.5 rounded bg-emerald-50/60 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-900/40 text-[10.5px]">
+                        <span className="font-bold text-emerald-800 dark:text-emerald-300">Tendik Terlibat: </span>
+                        <span>{inc.involvedStaffNames.join(', ')}</span>
                       </div>
                     )}
 
@@ -2058,6 +2371,15 @@ export const DutyPiketView: React.FC = () => {
                   Kalender Rentang Tanggal
                 </button>
               </div>
+
+              <button
+                type="button"
+                onClick={() => setIsSchedulePrintModalOpen(true)}
+                className="inline-flex items-center gap-1.5 px-3.5 py-2 text-xs font-bold text-slate-700 dark:text-slate-200 bg-white dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 border border-slate-200 dark:border-slate-700 rounded-xl shadow-xs transition-colors cursor-pointer shrink-0"
+              >
+                <Printer className="w-4 h-4 text-indigo-600" />
+                <span>Cetak Jadwal Piket</span>
+              </button>
 
               {canManageSchedule && (
                 <button
@@ -2349,7 +2671,37 @@ export const DutyPiketView: React.FC = () => {
                       </td>
 
                     <td className="py-3 px-4 text-center">
-                      <div className="flex items-center justify-center gap-1.5">
+                      <div className="flex items-center justify-center gap-1.5 flex-wrap">
+                        {/* Request 8: Edit Jurnal Terbit (< 24 Jam) */}
+                        {jrn.createdAt && (Date.now() - new Date(jrn.createdAt).getTime()) < 24 * 60 * 60 * 1000 && (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setJournalDate(jrn.date);
+                              setJournalDay(jrn.day);
+                              setOfficer1Id(jrn.officer1Id);
+                              setOfficer2Id(jrn.officer2Id);
+                              setOfficer3Id(jrn.officer3Id);
+                              setTeachersPresent(jrn.teachersPresent || []);
+                              setTeachersAbsent(jrn.teachersAbsent || []);
+                              setStaffPresent(jrn.staffPresent || []);
+                              setStaffAbsent(jrn.staffAbsent || []);
+                              setGuests(jrn.guests || []);
+                              setStudentAttendanceSummaries(jrn.studentAttendance || []);
+                              setIncidents(jrn.incidents || []);
+                              setGeneralNotes(jrn.generalNotes || '');
+                              setEditingPublishedJournalId(jrn.id);
+                              setActiveTab('jurnal_input');
+                              setSubmitNotice(`Memuat Jurnal Piket ${jrn.day}, ${formatDateIndonesian(jrn.date)} untuk diedit. Batas edit berlaku 24 jam.`);
+                            }}
+                            className="flex items-center gap-1 px-2 py-1 text-[10.5px] font-bold bg-amber-50 hover:bg-amber-100 text-amber-700 dark:bg-amber-950 dark:text-amber-300 rounded-lg transition-colors cursor-pointer"
+                            title="Edit jurnal yang sudah terbit sebelum batas 24 jam"
+                          >
+                            <Edit className="w-3.5 h-3.5" />
+                            <span>Edit (&lt;24 Jam)</span>
+                          </button>
+                        )}
+
                         <button
                           type="button"
                           onClick={() => setPrintModalJournal(jrn)}
@@ -2362,14 +2714,12 @@ export const DutyPiketView: React.FC = () => {
                         <button
                           type="button"
                           onClick={() => {
-                            if (confirm('Hapus arsip laporan piket ini?')) {
-                              DataService.deleteDutyJournal(jrn.id, {
-                                id: currentUser.id,
-                                name: currentUser.name,
-                                role: currentUser.role,
-                              });
-                              setDutyJournals(DataService.getDutyJournals());
-                            }
+                            DataService.deleteDutyJournal(jrn.id, {
+                              id: currentUser.id,
+                              name: currentUser.name,
+                              role: currentUser.role,
+                            });
+                            setDutyJournals(DataService.getDutyJournals());
                           }}
                           className="p-1 rounded text-slate-400 hover:text-rose-600 cursor-pointer"
                           title="Hapus arsip"
@@ -2386,7 +2736,6 @@ export const DutyPiketView: React.FC = () => {
         </div>
       )}
 
-
       {/* ============================================================== */}
       {/* MODAL CETAK LAPORAN PIKET RESMI (4 PIHAK TANDATANGAN) (2.3)   */}
       {/* ============================================================== */}
@@ -2401,7 +2750,36 @@ export const DutyPiketView: React.FC = () => {
                   Format Cetak Laporan Berita Acara Jurnal Piket Harian Resmi
                 </h3>
               </div>
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-3">
+                <label className="flex items-center gap-1.5 text-xs text-slate-700 font-medium cursor-pointer select-none">
+                  <input
+                    type="checkbox"
+                    checked={includeJournalDocNumber}
+                    onChange={(e) => setIncludeJournalDocNumber(e.target.checked)}
+                    className="rounded text-indigo-600 focus:ring-indigo-500"
+                  />
+                  <span>Cantumkan Nomor Surat</span>
+                </label>
+
+                <button
+                  type="button"
+                  disabled={isExportingJournalPdf}
+                  onClick={async () => {
+                    if (!journalPrintCanvasRef.current) return;
+                    setIsExportingJournalPdf(true);
+                    try {
+                      await exportElementToPdf(journalPrintCanvasRef.current, `Laporan_Jurnal_Piket_${printModalJournal.date}.pdf`);
+                    } catch (err) {
+                      console.error('Gagal export PDF:', err);
+                    } finally {
+                      setIsExportingJournalPdf(false);
+                    }
+                  }}
+                  className="flex items-center gap-1.5 px-3.5 py-2 text-xs font-bold text-slate-700 hover:text-indigo-600 bg-slate-100 hover:bg-slate-200 rounded-lg shadow-xs cursor-pointer border border-slate-300"
+                >
+                  {isExportingJournalPdf ? <Loader2 className="w-4 h-4 animate-spin text-indigo-600" /> : <Download className="w-4 h-4 text-indigo-600" />}
+                  <span>Download .Pdf</span>
+                </button>
                 <button
                   type="button"
                   onClick={() => window.print()}
@@ -2421,11 +2799,12 @@ export const DutyPiketView: React.FC = () => {
             </div>
 
             {/* AREA DOKUMEN CETAK RESMI DINAS PENDIDIKAN */}
-            <div className="print-area font-serif text-slate-950 space-y-4">
+            <div ref={journalPrintCanvasRef} className="print-area font-serif text-slate-950 space-y-4 bg-white p-4">
               <OfficialLetterhead
                 profile={profile}
                 documentTitle="LAPORAN BERITA ACARA JURNAL PIKET HARIAN"
                 documentNumber={`421.3 / PIKET / ${printModalJournal.date.replace(/-/g, '')} / ${new Date().getFullYear()}`}
+                showDocumentNumber={includeJournalDocNumber}
               />
 
               {/* Rincian Hari / Tanggal */}
@@ -2459,69 +2838,164 @@ export const DutyPiketView: React.FC = () => {
                 </div>
               </div>
 
-              {/* II. REKAPITULASI KEHADIRAN GURU */}
-              <div className="space-y-1.5 text-xs pt-2">
+              {/* II. REKAPITULASI KEHADIRAN GURU (Request 6: Guru Hadir & Tidak Hadir Lengkap dengan Jam Datang & Pulang) */}
+              <div className="space-y-2 text-xs pt-2">
                 <p className="font-bold uppercase text-[11px] border-b border-slate-300 pb-0.5">
                   II. REKAPITULASI KEHADIRAN TENAGA PENDIDIK (GURU)
                 </p>
-                <div className="font-sans text-[11px] space-y-1.5">
+                <div className="font-sans text-[10.5px] space-y-2">
                   <p>
-                    Jumlah Guru Hadir Bertugas: <strong>{printModalJournal.teachersPresent.length} orang</strong> · Guru Tidak Hadir: <strong>{printModalJournal.teachersAbsent.length} orang</strong>
+                    Guru Hadir: <strong>{printModalJournal.teachersPresent.length} orang</strong> · Guru Tidak Hadir: <strong>{printModalJournal.teachersAbsent.length} orang</strong>
                   </p>
 
-                  {printModalJournal.teachersAbsent.length > 0 && (
+                  {/* Tabel Guru Hadir */}
+                  <div className="space-y-1">
+                    <span className="font-bold text-[10px] text-slate-700 block uppercase">
+                      A. Daftar Guru Hadir Bertugas:
+                    </span>
                     <table className="w-full text-left border border-slate-300 text-[10px]">
                       <thead>
                         <tr className="bg-slate-100 border-b border-slate-300 font-bold">
-                          <th className="p-1.5 border-r border-slate-300">Nama Guru Tidak Hadir</th>
-                          <th className="p-1.5 border-r border-slate-300">Keterangan</th>
-                          <th className="p-1.5 border-r border-slate-300">Kelas & Jam Mengajar</th>
-                          <th className="p-1.5 border-r border-slate-300">Guru Inval / Pengganti</th>
-                          <th className="p-1.5">Alasan / Penugasan</th>
+                          <th className="p-1 border-r border-slate-300 w-8 text-center">No</th>
+                          <th className="p-1 border-r border-slate-300">Nama Guru</th>
+                          <th className="p-1 border-r border-slate-300 w-16 text-center">Jam Datang</th>
+                          <th className="p-1 border-r border-slate-300 w-16 text-center">Jam Pulang</th>
+                          <th className="p-1 border-r border-slate-300">Kelas & Jam Mengajar</th>
+                          <th className="p-1">Keterangan / Status</th>
                         </tr>
                       </thead>
                       <tbody>
-                        {printModalJournal.teachersAbsent.map((ab, aIdx) => {
-                          const subName = ab.slots[0]?.substituteTeacherName;
-                          const subId = ab.slots[0]?.substituteTeacherId;
-                          const isNoSub = !subName || subName === 'Tidak ada pengganti' || subId === 'none';
-
-                          return (
-                            <tr key={aIdx} className="border-b border-slate-200">
-                              <td className="p-1.5 font-bold border-r border-slate-300">{ab.teacherName}</td>
-                              <td className="p-1.5 font-semibold text-rose-700 border-r border-slate-300">{ab.absenceReason}</td>
-                              <td className="p-1.5 border-r border-slate-300">
-                                {ab.slots.map((s) => `${s.className} (${s.period})`).join(', ')}
-                              </td>
-                              <td className="p-1.5 border-r border-slate-300">
-                                {isNoSub ? (
-                                  <span className="italic text-slate-500">Tidak ada pengganti</span>
-                                ) : (
-                                  <span className="font-semibold">{subName}</span>
-                                )}
-                              </td>
-                              <td className="p-1.5">{ab.absenceNotes || '-'}</td>
-                            </tr>
-                          );
-                        })}
+                        {printModalJournal.teachersPresent.map((tp, tpIdx) => (
+                          <tr key={tpIdx} className="border-b border-slate-200">
+                            <td className="p-1 text-center border-r border-slate-300">{tpIdx + 1}</td>
+                            <td className="p-1 font-semibold border-r border-slate-300">{tp.teacherName}</td>
+                            <td className="p-1 text-center font-mono border-r border-slate-300">{tp.checkInTime || '06:45'}</td>
+                            <td className="p-1 text-center font-mono border-r border-slate-300">{tp.checkOutTime || '15:30'}</td>
+                            <td className="p-1 border-r border-slate-300">
+                              {tp.slots.map((s) => `${s.className} (${s.period})`).join('; ') || 'Piket / Pendampingan'}
+                            </td>
+                            <td className="p-1 text-emerald-800 font-medium">Hadir Lengkap Bertugas</td>
+                          </tr>
+                        ))}
                       </tbody>
                     </table>
+                  </div>
+
+                  {/* Tabel Guru Tidak Hadir */}
+                  {printModalJournal.teachersAbsent.length > 0 && (
+                    <div className="space-y-1 pt-1">
+                      <span className="font-bold text-[10px] text-rose-800 block uppercase">
+                        B. Daftar Guru Tidak Hadir / Berhalangan:
+                      </span>
+                      <table className="w-full text-left border border-slate-300 text-[10px]">
+                        <thead>
+                          <tr className="bg-rose-50 border-b border-slate-300 font-bold text-rose-950">
+                            <th className="p-1 border-r border-slate-300 w-8 text-center">No</th>
+                            <th className="p-1 border-r border-slate-300">Nama Guru</th>
+                            <th className="p-1 border-r border-slate-300">Keterangan</th>
+                            <th className="p-1 border-r border-slate-300">Alasan Tidak Hadir</th>
+                            <th className="p-1 border-r border-slate-300">Guru Inval / Pengganti</th>
+                            <th className="p-1">Jadwal Kelas Terdampak</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {printModalJournal.teachersAbsent.map((ab, aIdx) => {
+                            const subName = ab.slots[0]?.substituteTeacherName;
+                            const subId = ab.slots[0]?.substituteTeacherId;
+                            const isNoSub = !subName || subName === 'Tidak ada pengganti' || subId === 'none';
+
+                            return (
+                              <tr key={aIdx} className="border-b border-slate-200">
+                                <td className="p-1 text-center border-r border-slate-300">{aIdx + 1}</td>
+                                <td className="p-1 font-bold border-r border-slate-300">{ab.teacherName}</td>
+                                <td className="p-1 font-semibold text-rose-700 border-r border-slate-300">{ab.absenceReason}</td>
+                                <td className="p-1 border-r border-slate-300">{ab.absenceNotes || '-'}</td>
+                                <td className="p-1 border-r border-slate-300">
+                                  {isNoSub ? (
+                                    <span className="italic text-slate-500">Tidak ada pengganti</span>
+                                  ) : (
+                                    <span className="font-semibold text-indigo-900">{subName}</span>
+                                  )}
+                                </td>
+                                <td className="p-1">
+                                  {ab.slots.map((s) => `${s.className} (${s.period})`).join(', ') || '-'}
+                                </td>
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                      </table>
+                    </div>
                   )}
                 </div>
               </div>
 
-              {/* III. REKAPITULASI KEHADIRAN PEGAWAI */}
-              <div className="space-y-1.5 text-xs pt-2">
+              {/* III. REKAPITULASI KEHADIRAN PEGAWAI / TENDIK (Request 6: Pegawai Hadir & Tidak Hadir Lengkap dengan Jam Datang & Pulang) */}
+              <div className="space-y-2 text-xs pt-2">
                 <p className="font-bold uppercase text-[11px] border-b border-slate-300 pb-0.5">
-                  III. REKAPITULASI KEHADIRAN TENAGA KEPENDIDIKAN (PEGAWAI/TENDIK)
+                  III. REKAPITULASI KEHADIRAN TENAGA KEPENDIDIKAN (PEGAWAI / TENDIK)
                 </p>
-                <div className="font-sans text-[10.5px]">
+                <div className="font-sans text-[10.5px] space-y-2">
                   <p>
-                    Pegawai Hadir: <strong>{printModalJournal.staffPresent.length} orang</strong> (Hadir tepat waktu sesuai tugas pokok).
-                    {printModalJournal.staffAbsent.length > 0
-                      ? ` Pegawai Berhalangan: ${printModalJournal.staffAbsent.map((s) => `${s.staffName} (${s.absenceReason})`).join(', ')}.`
-                      : ' (Semua pegawai hadir lengkap)'}
+                    Pegawai Hadir: <strong>{printModalJournal.staffPresent.length} orang</strong> · Pegawai Tidak Hadir: <strong>{printModalJournal.staffAbsent.length} orang</strong>
                   </p>
+
+                  {/* Tabel Pegawai Hadir */}
+                  <table className="w-full text-left border border-slate-300 text-[10px]">
+                    <thead>
+                      <tr className="bg-slate-100 border-b border-slate-300 font-bold">
+                        <th className="p-1 border-r border-slate-300 w-8 text-center">No</th>
+                        <th className="p-1 border-r border-slate-300">Nama Pegawai</th>
+                        <th className="p-1 border-r border-slate-300">Jabatan</th>
+                        <th className="p-1 border-r border-slate-300 w-16 text-center">Jam Datang</th>
+                        <th className="p-1 border-r border-slate-300 w-16 text-center">Jam Pulang</th>
+                        <th className="p-1">Status / Keterangan</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {printModalJournal.staffPresent.map((sp, spIdx) => (
+                        <tr key={spIdx} className="border-b border-slate-200">
+                          <td className="p-1 text-center border-r border-slate-300">{spIdx + 1}</td>
+                          <td className="p-1 font-semibold border-r border-slate-300">{sp.staffName}</td>
+                          <td className="p-1 border-r border-slate-300">{sp.position}</td>
+                          <td className="p-1 text-center font-mono border-r border-slate-300">{sp.checkInTime || '06:45'}</td>
+                          <td className="p-1 text-center font-mono border-r border-slate-300">{sp.checkOutTime || '15:30'}</td>
+                          <td className="p-1 text-emerald-800 font-medium">Hadir Sesuai Jam Kerja</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+
+                  {/* Tabel Pegawai Tidak Hadir */}
+                  {printModalJournal.staffAbsent.length > 0 && (
+                    <div className="space-y-1 pt-1">
+                      <span className="font-bold text-[10px] text-rose-800 block uppercase">
+                        Daftar Pegawai / Tendik Tidak Hadir:
+                      </span>
+                      <table className="w-full text-left border border-slate-300 text-[10px]">
+                        <thead>
+                          <tr className="bg-rose-50 border-b border-slate-300 font-bold text-rose-950">
+                            <th className="p-1 border-r border-slate-300 w-8 text-center">No</th>
+                            <th className="p-1 border-r border-slate-300">Nama Pegawai</th>
+                            <th className="p-1 border-r border-slate-300">Jabatan</th>
+                            <th className="p-1 border-r border-slate-300">Keterangan</th>
+                            <th className="p-1">Alasan Tidak Hadir</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {printModalJournal.staffAbsent.map((sa, saIdx) => (
+                            <tr key={saIdx} className="border-b border-slate-200">
+                              <td className="p-1 text-center border-r border-slate-300">{saIdx + 1}</td>
+                              <td className="p-1 font-bold border-r border-slate-300">{sa.staffName}</td>
+                              <td className="p-1 border-r border-slate-300">{sa.position}</td>
+                              <td className="p-1 font-semibold text-rose-700 border-r border-slate-300">{sa.absenceReason}</td>
+                              <td className="p-1">{sa.absenceNotes || '-'}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
                 </div>
               </div>
 
@@ -2597,7 +3071,9 @@ export const DutyPiketView: React.FC = () => {
                     {printModalJournal.incidents.map((inc, iIdx) => (
                       <p key={iIdx}>
                         <strong>[{inc.time} WIB]</strong> {inc.description} (Pihak terlibat: {inc.partiesInvolved})
-                        {inc.involvesStudents && inc.involvedStudentNames.length > 0 && ` — Siswa: ${inc.involvedStudentNames.join(', ')}`}.
+                        {inc.involvesStudents && inc.involvedStudentNames.length > 0 && ` — Siswa: ${inc.involvedStudentNames.join(', ')}`}
+                        {inc.involvesTeachers && inc.involvedTeacherNames && inc.involvedTeacherNames.length > 0 && ` — Guru: ${inc.involvedTeacherNames.join(', ')}`}
+                        {inc.involvesStaff && inc.involvedStaffNames && inc.involvedStaffNames.length > 0 && ` — Tendik: ${inc.involvedStaffNames.join(', ')}`}.
                         <span className="font-semibold text-emerald-800"> Solusi/Tindak lanjut: {inc.followUp}</span>
                       </p>
                     ))}
@@ -2853,27 +3329,62 @@ export const DutyPiketView: React.FC = () => {
               </div>
             </div>
 
-            {/* 20.3: Jumlah Petugas Piket per Hari */}
-            <div className="pt-1">
-              <label className="block text-slate-700 dark:text-slate-300 font-bold mb-1">
-                3. Atur Jumlah Petugas Piket per Hari:
+            {/* 20.3 & Request 11: Jumlah Petugas Piket per Hari (Bisa Custom) */}
+            <div className="pt-1 space-y-2">
+              <label className="block text-slate-700 dark:text-slate-300 font-bold">
+                3. Atur Jumlah Petugas Piket per Hari (Custom):
               </label>
-              <div className="grid grid-cols-3 gap-2">
-                {[2, 3, 4].map((num) => (
+              <div className="flex items-center gap-2 flex-wrap">
+                {[2, 3, 4, 5].map((num) => (
                   <button
                     type="button"
                     key={num}
                     onClick={() => setGenOfficersPerDay(num)}
-                    className={`py-2 px-3 rounded-lg border text-xs font-bold transition-all cursor-pointer ${
+                    className={`py-1.5 px-3 rounded-lg border text-xs font-bold transition-all cursor-pointer ${
                       genOfficersPerDay === num
                         ? 'bg-indigo-600 text-white border-indigo-600 shadow-2xs'
                         : 'bg-slate-50 dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300'
                     }`}
                   >
-                    {num} Petugas / Hari
+                    {num} Petugas
                   </button>
                 ))}
+                <div className="flex items-center gap-1.5 ml-auto">
+                  <span className="text-[11px] text-slate-500 font-semibold">Custom:</span>
+                  <input
+                    type="number"
+                    min="1"
+                    max="15"
+                    value={genOfficersPerDay}
+                    onChange={(e) => setGenOfficersPerDay(Math.max(1, parseInt(e.target.value) || 1))}
+                    className="w-16 px-2 py-1 rounded border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-center font-bold text-xs"
+                  />
+                  <span className="text-[11px] text-slate-400">orang/hari</span>
+                </div>
               </div>
+            </div>
+
+            {/* Request 13: Jarak Waktu Bertugas Minimal (Anti-Berdekatan) */}
+            <div className="p-3 bg-amber-50/70 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800/60 rounded-xl space-y-1.5">
+              <div className="flex items-center justify-between">
+                <label className="block text-slate-800 dark:text-slate-200 font-bold">
+                  4. Jarak Waktu Bertugas Minimal (Anti-Berdekatan):
+                </label>
+                <div className="flex items-center gap-1.5">
+                  <input
+                    type="number"
+                    min="1"
+                    max="7"
+                    value={genMinDayGap}
+                    onChange={(e) => setGenMinDayGap(Math.max(1, parseInt(e.target.value) || 3))}
+                    className="w-14 px-2 py-1 rounded border border-amber-300 dark:border-amber-700 bg-white dark:bg-slate-900 text-center font-bold text-xs"
+                  />
+                  <span className="text-[11px] text-amber-800 dark:text-amber-300 font-semibold">Hari</span>
+                </div>
+              </div>
+              <p className="text-[10.5px] text-slate-600 dark:text-slate-400 leading-relaxed">
+                Mencegah guru/pegawai bertugas di hari yang berurutan atau berdekatan (misal Senin dan Selasa/Rabu). Sistem akan memprioritaskan personil dengan jeda minimal <strong>{genMinDayGap} hari</strong> sebelum dijadwalkan kembali.
+              </p>
             </div>
 
             {/* 20.4: Checkbox Libatkan Tendik & Keterangan Kepala Sekolah */}
@@ -3033,6 +3544,210 @@ export const DutyPiketView: React.FC = () => {
                 <Sparkles className="w-4 h-4" />
                 <span>Generate Jadwal Otomatis</span>
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL CETAK JADWAL PIKET RESMI (Request 12 & Request 9) */}
+      {isSchedulePrintModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs p-4 overflow-y-auto">
+          <div className="bg-white text-slate-900 rounded-2xl max-w-4xl w-full p-6 md:p-8 shadow-2xl my-auto space-y-6 max-h-[90vh] overflow-y-auto">
+            {/* Action Bar (Hidden on print) */}
+            <div className="no-print flex flex-col sm:flex-row sm:items-center justify-between pb-3 border-b border-slate-200 gap-3">
+              <div className="flex items-center gap-2">
+                <Printer className="w-5 h-5 text-indigo-600" />
+                <h3 className="text-sm font-bold text-slate-900">
+                  Cetak Jadwal Petugas Piket Sekolah Resmi
+                </h3>
+              </div>
+              <div className="flex items-center gap-3 flex-wrap">
+                <label className="flex items-center gap-1.5 text-xs text-slate-700 font-medium cursor-pointer select-none">
+                  <input
+                    type="checkbox"
+                    checked={includeScheduleDocNumber}
+                    onChange={(e) => setIncludeScheduleDocNumber(e.target.checked)}
+                    className="rounded text-indigo-600 focus:ring-indigo-500"
+                  />
+                  <span>Cantumkan Nomor Surat</span>
+                </label>
+
+                <button
+                  type="button"
+                  disabled={isExportingSchedulePdf}
+                  onClick={async () => {
+                    if (!schedulePrintCanvasRef.current) return;
+                    setIsExportingSchedulePdf(true);
+                    try {
+                      await exportElementToPdf(
+                        schedulePrintCanvasRef.current,
+                        `Jadwal_Piket_Sekolah_${printScheduleStartDate}_sd_${printScheduleEndDate}.pdf`
+                      );
+                    } catch (err) {
+                      console.error('Gagal export PDF jadwal:', err);
+                    } finally {
+                      setIsExportingSchedulePdf(false);
+                    }
+                  }}
+                  className="flex items-center gap-1.5 px-3.5 py-2 text-xs font-bold text-slate-700 hover:text-indigo-600 bg-slate-100 hover:bg-slate-200 rounded-lg shadow-xs cursor-pointer border border-slate-300"
+                >
+                  {isExportingSchedulePdf ? (
+                    <Loader2 className="w-4 h-4 animate-spin text-indigo-600" />
+                  ) : (
+                    <Download className="w-4 h-4 text-indigo-600" />
+                  )}
+                  <span>Download .Pdf</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => window.print()}
+                  className="flex items-center gap-1.5 px-4 py-2 text-xs font-bold text-white bg-indigo-600 hover:bg-indigo-700 rounded-lg shadow-xs cursor-pointer"
+                >
+                  <Printer className="w-4 h-4" />
+                  <span>Cetak Dokumen (Ctrl+P)</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setIsSchedulePrintModalOpen(false)}
+                  className="p-1.5 rounded-lg text-slate-400 hover:text-slate-600 hover:bg-slate-100 cursor-pointer"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+            </div>
+
+            {/* Filter Rentang Tanggal Cetak & Mode (Request 5) */}
+            <div className="no-print p-3 rounded-xl bg-slate-50 border border-slate-200 grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs items-center">
+              <div>
+                <label className="block text-slate-600 font-semibold mb-1">Cetak Dari Tanggal:</label>
+                <input
+                  type="date"
+                  value={printScheduleStartDate}
+                  onChange={(e) => setPrintScheduleStartDate(e.target.value)}
+                  className="w-full px-2.5 py-1.5 rounded-lg border border-slate-300 font-mono text-xs bg-white text-slate-900"
+                />
+              </div>
+              <div>
+                <label className="block text-slate-600 font-semibold mb-1">Sampai Tanggal:</label>
+                <input
+                  type="date"
+                  value={printScheduleEndDate}
+                  onChange={(e) => setPrintScheduleEndDate(e.target.value)}
+                  className="w-full px-2.5 py-1.5 rounded-lg border border-slate-300 font-mono text-xs bg-white text-slate-900"
+                />
+              </div>
+              <div>
+                <label className="block text-slate-600 font-semibold mb-1">Format Tampilan Jadwal:</label>
+                <select
+                  value={printScheduleMode}
+                  onChange={(e) => setPrintScheduleMode(e.target.value as any)}
+                  className="w-full px-2.5 py-1.5 rounded-lg border border-slate-300 font-semibold text-xs bg-white text-indigo-700"
+                >
+                  <option value="mingguan">Pola Hari Mingguan</option>
+                  <option value="harian_rentang">Kalender Harian Rentang Tanggal</option>
+                </select>
+              </div>
+            </div>
+
+            {/* AREA DOKUMEN CETAK RESMI DINAS PENDIDIKAN */}
+            <div ref={schedulePrintCanvasRef} className="print-area font-serif text-slate-950 space-y-4 bg-white p-4">
+              <OfficialLetterhead
+                profile={profile}
+                documentTitle="SURAT KEPUTUSAN JADWAL PETUGAS PIKET SEKOLAH"
+                documentNumber={`421.3 / SK-PIKET / ${activeAY.year.replace(/\//g, '-')}`}
+                showDocumentNumber={includeScheduleDocNumber}
+              />
+
+              <div className="text-center pb-2 font-sans text-xs text-slate-700 space-y-1">
+                <p className="font-bold text-sm text-slate-900">
+                  LAMPIRAN JADWAL PIKET HARIAN GURU & TENAGA KEPENDIDIKAN
+                </p>
+                <p>
+                  Periode Berlaku: <strong>{formatDateIndonesian(printScheduleStartDate)}</strong> s.d{' '}
+                  <strong>{formatDateIndonesian(printScheduleEndDate)}</strong>
+                </p>
+                <p className="text-[11px] text-slate-500">
+                  Semester: {activeAY.semester} · Tahun Ajaran: {activeAY.year} · Format: {printScheduleMode === 'mingguan' ? 'Pola Mingguan' : 'Rentang Harian Kalender'}
+                </p>
+              </div>
+
+              {/* Tabel Jadwal Mingguan / Rentang Waktu (Kolom Hari / Tanggal - Item 5) */}
+              <div className="overflow-x-auto font-sans text-xs">
+                <table className="w-full text-left border border-slate-300 text-[11px]">
+                  <thead>
+                    <tr className="bg-slate-100 border-b border-slate-300 font-bold">
+                      <th className="p-2 border-r border-slate-300 w-44">Hari / Tanggal</th>
+                      <th className="p-2 border-r border-slate-300 w-36">Pos / Lokasi Piket</th>
+                      <th className="p-2 border-r border-slate-300">Daftar Petugas Piket (Nama, Peran, No. HP)</th>
+                      <th className="p-2">Catatan Operasional</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {printedScheduleItems.map((sch, sIdx) => (
+                      <tr key={sIdx} className="border-b border-slate-200">
+                        <td className="p-2 font-bold border-r border-slate-300 align-top">
+                          <span className="text-indigo-900 block text-xs">{sch.dayLabel}</span>
+                          <span className="text-[10px] text-slate-500 font-normal block font-sans">
+                            {sch.dateLabel}
+                          </span>
+                        </td>
+                        <td className="p-2 border-r border-slate-300 align-top text-slate-700">
+                          {sch.standbyLocation}
+                        </td>
+                        <td className="p-2 border-r border-slate-300 align-top">
+                          <div className="space-y-1">
+                            {sch.dutyOfficers.map((off, oIdx) => (
+                              <div key={oIdx} className="flex items-center justify-between gap-2">
+                                <div>
+                                  <span className="font-bold text-slate-900">{off.teacherName}</span>
+                                  <span className="text-slate-500 text-[10px] ml-1.5 font-normal">
+                                    ({off.role})
+                                  </span>
+                                </div>
+                                {off.phone && (
+                                  <span className="text-[10px] text-slate-500 font-mono">
+                                    {off.phone}
+                                  </span>
+                                )}
+                              </div>
+                            ))}
+                          </div>
+                        </td>
+                        <td className="p-2 align-top text-[10px] text-slate-600 italic">
+                          {sch.notes || 'Standby 15 menit sebelum jam pelajaran pertama.'}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+
+              {/* Tanda Tangan Resmi Wakasek & Kepala Sekolah */}
+              <div className="pt-8 font-sans">
+                <div className="text-right text-xs mb-4">
+                  Ditetapkan di: {profile.city}, {formatDateIndonesian(genStartDate)}
+                </div>
+
+                <div className="grid grid-cols-2 gap-8 text-center text-xs pb-10">
+                  {/* Sebelah Kiri: Kepala Sekolah */}
+                  <div>
+                    <p className="text-slate-600 mb-16">
+                      Mengesahkan,<br />Kepala Sekolah
+                    </p>
+                    <p className="font-bold underline uppercase">{profile.principalName || 'DR. HENDRA WIJAYA, M.PD.'}</p>
+                    <p className="text-[10px] font-mono text-slate-500">NIP. {profile.principalNip || '19740512 199903 1 004'}</p>
+                  </div>
+
+                  {/* Sebelah Kanan: Penanggung Jawab Jadwal (Wakasek Kurikulum) */}
+                  <div>
+                    <p className="text-slate-600 mb-16">
+                      Penanggung Jawab Jadwal,<br />Wakasek Bidang Kurikulum
+                    </p>
+                    <p className="font-bold underline uppercase">{profile.vicePrincipalCurriculumName || 'DRS. AKHMAD FAUZI, M.PD.'}</p>
+                    <p className="text-[10px] font-mono text-slate-500">NIP. {profile.vicePrincipalCurriculumNip || '19740815 200003 1 002'}</p>
+                  </div>
+                </div>
+              </div>
             </div>
           </div>
         </div>

@@ -37,6 +37,7 @@ export const ParentPortalView: React.FC<ParentPortalViewProps> = ({ initialTab =
   const { currentUser, activeChildId, setActiveChildId } = useAuth();
   const students = DataService.getStudents();
   const classes = DataService.getClasses();
+  const teachers = DataService.getTeachers();
   const assignments = DataService.getAssignments();
   const profile = DataService.getSchoolProfile();
 
@@ -107,6 +108,31 @@ export const ParentPortalView: React.FC<ParentPortalViewProps> = ({ initialTab =
     };
 
   const [printModalOpen, setPrintModalOpen] = useState(false);
+
+  // Dynamic Class & Homeroom Teacher Resolution (Bug Fix Item 1)
+  const activeChildClass = useMemo(() => {
+    return classes.find(
+      (c) => c.id === activeChild?.classId || c.name === activeChild?.className
+    );
+  }, [classes, activeChild]);
+
+  const activeHomeroomTeacher = useMemo(() => {
+    if (!activeChildClass) return undefined;
+    return teachers.find(
+      (t) =>
+        t.id === activeChildClass.homeroomTeacherId ||
+        t.nip === activeChildClass.homeroomTeacherId ||
+        (t.isHomeroom && t.homeroomClassName === activeChildClass.name) ||
+        (activeChildClass.homeroomTeacherName &&
+          t.name.trim().toLowerCase() === activeChildClass.homeroomTeacherName.trim().toLowerCase())
+    );
+  }, [teachers, activeChildClass]);
+
+  const homeroomTeacherName =
+    activeHomeroomTeacher?.name ||
+    activeChildClass?.homeroomTeacherName ||
+    'Belum Ditetapkan';
+  const homeroomTeacherNip = activeHomeroomTeacher?.nip || '-';
 
   // Compose Message State
   const [isComposeModalOpen, setIsComposeModalOpen] = useState(false);
@@ -902,10 +928,10 @@ export const ParentPortalView: React.FC<ParentPortalViewProps> = ({ initialTab =
             <div className="p-4 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800">
               <span className="text-xs text-slate-500">Wali Kelas</span>
               <p className="text-sm font-bold text-slate-900 dark:text-white truncate mt-1">
-                Budi Santoso, S.Si.
+                {homeroomTeacherName}
               </p>
               <p className="text-[11px] text-slate-500 mt-0.5 font-mono">
-                Ruang Guru Lt. 2
+                {activeHomeroomTeacher?.phone ? `WA: ${activeHomeroomTeacher.phone}` : activeChildClass ? `Wali Kelas ${activeChildClass.name}` : 'Ruang Guru'}
               </p>
             </div>
 
@@ -1226,9 +1252,9 @@ export const ParentPortalView: React.FC<ParentPortalViewProps> = ({ initialTab =
         title="Cetak Lembar Hasil Belajar Siswa"
         documentTitle="LEMBAR HASIL BELAJAR SISWA (RAPOR SEMENTARA)"
         documentNumber={`421.7 / RAPOR / ${activeChild.nis} / 2024`}
-        rightSignerTitle="Wali Kelas X MIPA 1"
-        rightSignerName="Budi Santoso, S.Si."
-        rightSignerNip="19820311 200801 1 007"
+        rightSignerTitle={`Wali Kelas ${activeChildClass?.name || activeChild.className}`}
+        rightSignerName={homeroomTeacherName}
+        rightSignerNip={homeroomTeacherNip}
       >
         <div className="space-y-4">
           <table className="w-full text-xs mb-3">
@@ -1281,10 +1307,10 @@ export const ParentPortalView: React.FC<ParentPortalViewProps> = ({ initialTab =
 
           <div className="p-3 border border-black text-xs">
             <span className="font-bold">Rekapitulasi Kehadiran: </span>
-            <span>Hadir: {activeChild.attendance.hadir} hari, </span>
-            <span>Sakit: {activeChild.attendance.sakit} hari, </span>
-            <span>Izin: {activeChild.attendance.izin} hari, </span>
-            <span>Alpa: {activeChild.attendance.alpa} hari.</span>
+            <span>Hadir: {activeChild?.attendance?.hadir ?? 0} hari, </span>
+            <span>Sakit: {activeChild?.attendance?.sakit ?? 0} hari, </span>
+            <span>Izin: {activeChild?.attendance?.izin ?? 0} hari, </span>
+            <span>Alpa: {activeChild?.attendance?.alpa ?? 0} hari.</span>
           </div>
         </div>
       </PrintModal>

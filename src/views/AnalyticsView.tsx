@@ -26,7 +26,7 @@ export const AnalyticsView: React.FC = () => {
   // Calculate stats
   const totalStudents = students.length;
   const atRiskStudents = students.filter(
-    (s) => s.attendance.alpa >= 3 || s.gpa < 75
+    (s) => (s.attendance?.alpa ?? 0) >= 3 || (s.gpa ?? 100) < 75
   );
 
   const subjectAverages = [
@@ -161,7 +161,7 @@ export const AnalyticsView: React.FC = () => {
                   </td>
                   <td className="py-2.5 px-3">{std.className}</td>
                   <td className="py-2.5 px-3 font-medium text-rose-600">
-                    Alpa {std.attendance.alpa} hari · Nilai rata-rata {std.gpa} (di bawah KKM)
+                    Alpa {std.attendance?.alpa ?? 0} hari · Nilai rata-rata {std.gpa ?? 0} (di bawah KKM)
                   </td>
                   <td className="py-2.5 px-3 text-slate-600 dark:text-slate-300">
                     {std.parentName} ({std.parentPhone})

@@ -190,6 +190,18 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   };
 
+  useEffect(() => {
+    const handleSync = () => {
+      refreshUsers();
+    };
+    window.addEventListener('schoolsphere_cloud_synced', handleSync);
+    window.addEventListener('schoolsphere_user_updated', handleSync);
+    return () => {
+      window.removeEventListener('schoolsphere_cloud_synced', handleSync);
+      window.removeEventListener('schoolsphere_user_updated', handleSync);
+    };
+  }, [currentUser?.id]);
+
   const login = (usernameOrEmail: string, password: string): { success: boolean; message: string } => {
     const freshUsers = DataService.getUsers();
     const query = usernameOrEmail.trim().toLowerCase();
@@ -409,10 +421,15 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         return ['super_admin', 'kepala_sekolah', 'wakasek_kurikulum', 'operator', 'guru', 'wali_kelas', 'guru_bk', 'tendik'].includes(role);
       case 'tendik':
         return ['super_admin', 'kepala_sekolah', 'wakasek_kurikulum', 'operator', 'guru', 'wali_kelas', 'tendik'].includes(role);
+      case 'letters':
+        return ['super_admin', 'kepala_sekolah', 'wakasek_kurikulum', 'operator', 'wali_kelas', 'guru_bk', 'guru'].includes(role);
+      case 'rekap_ptk':
+        return ['super_admin', 'wakasek_kurikulum'].includes(role);
       case 'settings':
       case 'system_management':
       case 'backup':
       case 'audit':
+      case 'developer_identity':
         return ['super_admin', 'wakasek_kurikulum'].includes(role);
       case 'announcements':
         return true;
